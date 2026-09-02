@@ -1,0 +1,11 @@
+node_modules/
+.pnpm-store/
+dist/
+build/
+.svelte-kit/
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+*.zip

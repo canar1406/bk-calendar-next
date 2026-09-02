@@ -1,0 +1,20 @@
+{
+	"name": "@bkalendar-next/extension",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "vite build",
+		"check": "tsc --noEmit",
+		"test": "node --experimental-strip-types --test test/**/*.test.ts"
+	},
+	"dependencies": {
+		"@bkalendar-next/core": "workspace:*",
+		"@bkalendar-next/timetable": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/chrome": "latest",
+		"typescript": "~6.0.0",
+		"vite": "latest"
+	}
+}

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="vi">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>BKalendar Next</title>
+	</head>
+	<body>
+		<main>
+			<header class="brand">
+				<span class="brand-mark" aria-hidden="true">BK</span>
+				<div>
+					<p class="eyebrow">BKalendar Next</p>
+					<h1>Xem lại thay đổi</h1>
+				</div>
+			</header>
+
+			<section class="status-card" aria-live="polite" aria-atomic="true">
+				<span id="status-dot" class="status-dot" aria-hidden="true"></span>
+				<div class="status-copy">
+					<p id="status-title" class="status-title">Đang đọc trạng thái…</p>
+					<p id="status-detail" class="status-detail">
+						Đang tải bản xem trước đã lưu trên thiết bị này.
+					</p>
+					<div class="profile-meta">
+						<p id="profile-label">Đang đọc hồ sơ…</p>
+						<p id="captured-label">Đang đọc thời điểm kiểm tra…</p>
+					</div>
+				</div>
+			</section>
+
+			<section class="review" aria-labelledby="review-title">
+				<div class="section-heading">
+					<h2 id="review-title">Tóm tắt cục bộ</h2>
+					<span class="local-badge">Chưa đồng bộ</span>
+				</div>
+
+				<div class="change-grid">
+					<article class="change-card added">
+						<strong id="added-count">0</strong>
+						<span>Thêm mới</span>
+					</article>
+					<article class="change-card changed">
+						<strong id="changed-count">0</strong>
+						<span>Thay đổi</span>
+					</article>
+					<article id="removed-card" class="change-card removed" data-blocked="false">
+						<strong id="removed-count">0</strong>
+						<span>Có thể xóa</span>
+					</article>
+				</div>
+			</section>
+
+			<aside id="deletion-warning" class="warning" role="status" hidden>
+				<span class="warning-icon" aria-hidden="true">!</span>
+				<div>
+					<strong>Xóa đang bị chặn</strong>
+					<p id="deletion-warning-text"></p>
+				</div>
+			</aside>
+
+			<a
+				id="primary-action"
+				class="primary-action"
+				href="https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb"
+				target="_blank"
+				rel="noreferrer"
+			>
+				Mở thời khóa biểu MyBK
+			</a>
+
+			<p class="privacy-note">
+				Popup chỉ giúp đối chiếu dữ liệu đã lưu cục bộ. Hành động này không ghi Google Calendar,
+				không dùng OAuth và không lưu mật khẩu hay token.
+			</p>
+		</main>
+		<script type="module" src="./main.ts"></script>
+	</body>
+</html>

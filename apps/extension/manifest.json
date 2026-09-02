@@ -1,0 +1,22 @@
+{
+	"manifest_version": 3,
+	"name": "BKalendar Next",
+	"version": "0.1.0",
+	"description": "Đọc thời khóa biểu MyBK cục bộ và báo trạng thái để bạn chủ động xem lại.",
+	"permissions": ["storage"],
+	"host_permissions": ["https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb*"],
+	"background": {
+		"service_worker": "background.js",
+		"type": "module"
+	},
+	"action": {
+		"default_title": "BKalendar Next",
+		"default_popup": "src/popup/index.html"
+	},
+	"content_scripts": [
+		{
+			"matches": ["https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb*"],
+			"js": ["content.js"]
+		}
+	]
+}

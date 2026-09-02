@@ -1,0 +1,26 @@
+{
+	"name": "bkalendar-next",
+	"private": true,
+	"type": "module",
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"packageManager": "pnpm@11.19.0",
+	"scripts": {
+		"build": "pnpm -r --if-present build",
+		"check": "pnpm -r --if-present check",
+		"dev": "pnpm --filter @bkalendar-next/web dev",
+		"format": "prettier --write .",
+		"lint": "prettier --check . && pnpm check",
+		"test": "node --experimental-strip-types --test packages/*/test/*.test.ts apps/*/test/*.test.ts",
+		"test:watch": "node --experimental-strip-types --test --watch packages/*/test/*.test.ts apps/*/test/*.test.ts"
+	},
+	"devDependencies": {
+		"@types/chrome": "latest",
+		"@types/node": "latest",
+		"prettier": "latest",
+		"prettier-plugin-svelte": "latest",
+		"typescript": "~6.0.0"
+	}
+}

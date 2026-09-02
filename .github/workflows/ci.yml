@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Format, test, typecheck, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v2
+        with:
+          version: 11.19.0
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Verify toolchain
+        run: |
+          node --version
+          test "$(node --version | cut -d. -f1)" = "v24"
+          test "$(pnpm --version)" = "11.19.0"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm exec prettier --check .
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Run typechecks
+        run: pnpm check
+
+      - name: Build all workspaces
+        run: pnpm build

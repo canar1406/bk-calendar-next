@@ -1,0 +1,4 @@
+interface:
+  display_name: 'BKalendar Next'
+  short_description: 'Protect BKalendar architecture and sync safety'
+  default_prompt: 'Continue BKalendar Next while preserving its local-first architecture and verified sync invariants.'

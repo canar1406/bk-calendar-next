@@ -1,0 +1,14 @@
+{
+	"name": "@bkalendar-next/core",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": ".\/src\/index.ts",
+	"scripts": {
+		"check": "tsc --noEmit",
+		"test": "node --experimental-strip-types --test test/*.test.ts"
+	},
+	"dependencies": {
+		"@bkalendar-next/timetable": "workspace:*"
+	}
+}

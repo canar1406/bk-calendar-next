@@ -1,0 +1,29 @@
+{
+	"name": "@bkalendar-next/web",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"test": "node --experimental-strip-types --test test/*.test.ts"
+	},
+	"dependencies": {
+		"@bkalendar-next/core": "workspace:*",
+		"@bkalendar-next/google-calendar": "workspace:*",
+		"@bkalendar-next/ical": "workspace:*",
+		"@bkalendar-next/timetable": "workspace:*"
+	},
+	"devDependencies": {
+		"@fontsource/be-vietnam-pro": "latest",
+		"@fontsource/ibm-plex-mono": "latest",
+		"@sveltejs/adapter-static": "latest",
+		"@sveltejs/kit": "latest",
+		"svelte": "latest",
+		"svelte-check": "latest",
+		"typescript": "~6.0.0",
+		"vite": "latest"
+	}
+}

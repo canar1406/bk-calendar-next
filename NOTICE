@@ -1,0 +1,10 @@
+BKalendar Next
+
+This project contains code derived from the MIT-licensed BKalendar projects:
+
+- https://github.com/bkalendar/core
+  Reference revision: 0e1522d000f2fca11bce3f46bec0299929f3fea7
+- https://github.com/bkalendar/bkalendar.github.io
+  Reference revision: 2d76646e85d60723614b9b06a96529ec0c009f8c
+
+The original copyright and MIT license are preserved in LICENSE.
