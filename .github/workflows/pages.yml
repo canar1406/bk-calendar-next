@@ -55,6 +55,8 @@ jobs:
           printf 'Using BASE_PATH=%q\n' "$base_path"
 
       - name: Build static SvelteKit site
+        env:
+          PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.PUBLIC_GOOGLE_CLIENT_ID }}
         run: pnpm --filter @bkalendar-next/web build
 
       - name: Upload GitHub Pages artifact
