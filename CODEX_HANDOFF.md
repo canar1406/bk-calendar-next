@@ -32,13 +32,20 @@ Implemented after handoff:
 - public source auto-detection/dispatcher;
 - GitHub Actions CI and GitHub Pages workflows;
 - MIT license, upstream attribution, and README;
-- removal of the obsolete duplicate core implementation files.
+- removal of the obsolete duplicate core implementation files;
+- sample previews are marked with provenance and cannot be persisted, exported,
+  or synchronized to Google Calendar;
+- manual paste completeness is inferred from the MyBK DataTables footer;
+- reconciliation reports skipped remote deletions and cannot promote a
+  snapshot while stale remote events remain blocked;
+- a sanitized 20261 fixture verifies that ISO week 36 contains only AS1002 and
+  PE1013 and emits the expected Google EXDATE values.
 
 Latest verified commands:
 
 ```text
 pnpm exec prettier --check .                 pass
-pnpm test                                    101 pass, 0 fail
+pnpm test                                    110 pass, 0 fail
 pnpm check                                   pass
 pnpm build                                   pass
 BASE_PATH=/bkalendar-next pnpm --filter @bkalendar-next/web build
@@ -46,20 +53,20 @@ BASE_PATH=/bkalendar-next pnpm --filter @bkalendar-next/web build
 pnpm peers check                             no issues
 ```
 
-Browser QA verified localhost page identity, meaningful render, sample import,
-desktop/mobile layouts, diff rendering, and the missing-OAuth configuration
-message with no app console errors. The in-app browser did not expose a
-download event for the Blob-based `.ics` action; download construction,
-temporary-link attachment, cleanup, and RFC 5545 content are covered by tests.
+Browser QA verified localhost page identity, meaningful render, desktop/mobile
+layouts, diff rendering, sample export/sync blocking, and a complete 9/9 MyBK
+import with eight scheduled sessions and no app console errors. The in-app
+browser did not expose a download event for the Blob-based `.ics` action;
+download construction, temporary-link attachment, cleanup, and RFC 5545
+content are covered by tests.
 
 Still not complete:
 
-- real Google OAuth/API matrix testing requires a user-created Google Cloud
-  browser client ID and authorized origins;
 - extension must be manually loaded and tested on the real authenticated MyBK
   timetable page in Chrome and Edge;
-- real calendar imports still need manual Google/Apple integration testing;
-- no production deployment or extension-store release has occurred.
+- real Gmail/HCMUT Google writes and Apple imports still need controlled manual
+  integration testing;
+- no extension-store release has occurred.
 
 ---
 

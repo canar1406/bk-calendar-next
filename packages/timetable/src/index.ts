@@ -29,6 +29,7 @@ export interface TimetableSnapshot {
 	sourceKind: SourceKind;
 	semester: number;
 	capturedAt: string;
+	provenance?: 'user' | 'sample';
 	sourceUpdatedAt?: string;
 	fingerprint: string;
 	events: ManagedEvent[];

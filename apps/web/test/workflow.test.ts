@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { prepareTimetable } from '../src/lib/workflow.ts';
+import { inferCaptureCompleteness, prepareTimetable } from '../src/lib/workflow.ts';
 
 const source = `20261 - Học kỳ 1 Năm học 2026 - 2027(Hiện hành)
 Ngày cập nhật gần nhất của HK này: 28/08/2026 14:57:54
@@ -49,5 +49,25 @@ describe('web import workflow', () => {
 		});
 		assert.equal(second.diff.removed.length, 1);
 		assert.equal(second.diff.canDelete, false);
+	});
+
+	it('recognizes a full MyBK footer as a complete capture', () => {
+		assert.deepEqual(inferCaptureCompleteness(source), {
+			state: 'complete',
+			parsedRows: 1,
+			expectedRows: 1
+		});
+	});
+
+	it('keeps paginated and footerless paste captures deletion-safe', () => {
+		assert.deepEqual(inferCaptureCompleteness(source.replace('1 đến 1 / 1', '1 đến 1 / 2')), {
+			state: 'incomplete',
+			parsedRows: 1,
+			expectedRows: 2
+		});
+		assert.deepEqual(inferCaptureCompleteness(source.replace(/\nTrình bày từ dòng.+$/u, '')), {
+			state: 'unknown',
+			parsedRows: 1
+		});
 	});
 });

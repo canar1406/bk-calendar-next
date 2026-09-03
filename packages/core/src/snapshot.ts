@@ -17,6 +17,7 @@ export interface SnapshotOptions {
 	sourceKind: SourceKind;
 	capturedAt?: string;
 	completeness?: CaptureCompleteness;
+	provenance?: 'user' | 'sample';
 }
 
 export async function toTimetableSnapshot(
@@ -80,6 +81,7 @@ export async function toTimetableSnapshot(
 		sourceKind: options.sourceKind,
 		semester: timetable.semester,
 		capturedAt: options.capturedAt ?? new Date().toISOString(),
+		...(options.provenance ? { provenance: options.provenance } : {}),
 		...(timetable.sourceUpdatedAt ? { sourceUpdatedAt: timetable.sourceUpdatedAt } : {}),
 		warnings,
 		...(options.completeness ? { completeness: options.completeness } : {}),

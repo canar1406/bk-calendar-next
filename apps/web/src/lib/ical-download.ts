@@ -37,6 +37,9 @@ export function createIcalendarExport(
 	calendarName: string,
 	options: { generatedAt?: Date } = {}
 ): IcalendarExport {
+	if (snapshot.provenance === 'sample') {
+		throw new Error('Dữ liệu mẫu chỉ dùng để xem trước và không thể xuất lịch.');
+	}
 	return {
 		content: formatIcalendar(snapshot, {
 			calendarName,

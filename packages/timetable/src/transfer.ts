@@ -98,6 +98,9 @@ function isTimetableSnapshot(value: unknown): value is TimetableSnapshot {
 		isSourceKind(value.sourceKind) &&
 		Number.isInteger(value.semester) &&
 		typeof value.capturedAt === 'string' &&
+		(value.provenance === undefined ||
+			value.provenance === 'user' ||
+			value.provenance === 'sample') &&
 		typeof value.fingerprint === 'string' &&
 		Array.isArray(value.events) &&
 		value.events.every(isManagedEvent) &&

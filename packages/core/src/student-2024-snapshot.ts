@@ -21,6 +21,7 @@ export async function createStudent2024Snapshot(
 		sourceKind: 'student-2024',
 		semester: parsed.semester,
 		capturedAt: options.capturedAt ?? new Date().toISOString(),
+		...(options.provenance ? { provenance: options.provenance } : {}),
 		...(parsed.sourceUpdatedAt === undefined ? {} : { sourceUpdatedAt: parsed.sourceUpdatedAt }),
 		warnings: [],
 		...(options.completeness === undefined ? {} : { completeness: options.completeness }),

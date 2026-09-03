@@ -22,20 +22,29 @@
 	import { loadGoogleIdentity } from '$lib/google-identity.ts';
 	import { syncPendingProfile } from '$lib/google-sync.ts';
 	import { createIcalendarExport, triggerIcalendarDownload } from '$lib/ical-download.ts';
-	import { stageTimetableImport, stageTransferredSnapshot } from '$lib/workflow.ts';
+	import {
+		inferCaptureCompleteness,
+		prepareTimetable,
+		stageTimetableImport,
+		stageTransferredSnapshot,
+		type PreparedTimetable
+	} from '$lib/workflow.ts';
 
 	const sample = `20261 - Học kỳ 1 Năm học 2026 - 2027(Hiện hành)
 Ngày cập nhật gần nhất của HK này: 28/08/2026 14:57:54
 HỌC KỲ\tMÃ MH\tTÊN MÔN HỌC\tTÍN CHỈ\tTC HỌC PHÍ\tNHÓM - TỔ\tTHỨ\tTIẾT\tGIỜ HỌC\tPHÒNG\tCƠ SỞ\tTUẦN HỌC
-20261\tMT1003\tGiải tích 1\t4\t4\tL11\t2\t2 - 4\t7:00 - 9:50\tH1-GĐH1\tBK-CS2\t35|--|37|
-20261\tPH1003\tVật lý 1\t4\t4\tL02\t4\t7 - 9\t12:00 - 14:50\tB4-202\tBK-CS1\t35|36|37|
-20261\tCO1027\tKỹ thuật lập trình\t3\t3\tL05\t6\t4 - 6\t9:00 - 11:50\tH6-604\tBK-CS2\t35|36|37|
+20261\tDEMO1001\tMôn học minh họa buổi sáng\t3\t3\tDEMO-A\t2\t2 - 4\t7:00 - 9:50\tPHÒNG-DEMO-1\tBK-CS2\t35|--|37|
+20261\tDEMO1002\tMôn học minh họa buổi chiều\t3\t3\tDEMO-B\t4\t7 - 9\t12:00 - 14:50\tPHÒNG-DEMO-2\tBK-CS1\t35|36|37|
+20261\tDEMO1003\tThực hành minh họa\t1\t1\tDEMO-C\t6\t4 - 6\t9:00 - 11:50\tPHÒNG-DEMO-3\tBK-CS2\t35|36|37|
 Trình bày từ dòng 1 đến 3 / 3 dòng`;
 
-	type Prepared = Awaited<ReturnType<typeof stageTimetableImport>>;
+	type Prepared = PreparedTimetable & {
+		profile?: Awaited<ReturnType<typeof stageTimetableImport>>['profile'];
+	};
 
 	let source = '';
 	let result: Prepared | undefined;
+	let sourceIsSample = false;
 	let errorMessage = '';
 	let busy = false;
 	let syncingGoogle = false;
@@ -87,12 +96,20 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 
 		busy = true;
 		try {
-			const store = createProfileStore(createBrowserStorage(window.localStorage));
-			const next = await stageTimetableImport(store, source, {
-				capturedAt: new Date().toISOString(),
-				completeness: { state: 'unknown', parsedRows: countSourceRows(source) }
-			});
-			result = next;
+			if (sourceIsSample) {
+				result = await prepareTimetable(source, undefined, {
+					capturedAt: new Date().toISOString(),
+					completeness: inferCaptureCompleteness(source),
+					provenance: 'sample'
+				});
+			} else {
+				const store = createProfileStore(createBrowserStorage(window.localStorage));
+				result = await stageTimetableImport(store, source, {
+					capturedAt: new Date().toISOString(),
+					completeness: inferCaptureCompleteness(source),
+					provenance: 'user'
+				});
+			}
 		} catch (error) {
 			errorMessage =
 				error instanceof Error
@@ -103,19 +120,15 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		}
 	}
 
-	function countSourceRows(value: string): number {
-		return value
-			.split(/\r?\n/u)
-			.filter((line) => /^\d{5}\t/u.test(line) && line.split('\t').length === 12).length;
-	}
-
 	function useSample(): void {
 		source = sample;
+		sourceIsSample = true;
+		result = undefined;
 		errorMessage = '';
 	}
 
 	async function downloadIcalendar(): Promise<void> {
-		if (!result) return;
+		if (!result || result.snapshot.provenance === 'sample') return;
 		calendarExportMessage = '';
 		const calendarName = `BKalendar • HK ${result.snapshot.semester}`;
 		const file = createIcalendarExport(result.snapshot, calendarName);
@@ -130,7 +143,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	}
 
 	async function syncGoogleCalendar(): Promise<void> {
-		if (!result || syncingGoogle) return;
+		if (!result || result.snapshot.provenance === 'sample' || syncingGoogle) return;
 		googleMessage = '';
 		googleResult = undefined;
 		if (!googleClientId) {
@@ -222,6 +235,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			<textarea
 				id="timetable-source"
 				bind:value={source}
+				on:input={() => (sourceIsSample = false)}
 				rows="10"
 				placeholder="Sao chép toàn bộ bảng trên MyBK rồi dán vào đây…"
 				spellcheck="false"></textarea>
@@ -233,6 +247,12 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			</div>
 		</form>
 		<p class="error" aria-live="polite">{errorMessage}</p>
+		{#if result?.snapshot.provenance === 'sample'}
+			<p class="sample-warning" role="status">
+				Đây là dữ liệu minh họa. BKalendar không lưu, đồng bộ Google hoặc xuất file lịch từ dữ liệu
+				này.
+			</p>
+		{/if}
 	</section>
 
 	{#if result}
@@ -263,15 +283,20 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 					<button
 						class="google-button"
 						type="button"
-						disabled={syncingGoogle}
+						disabled={syncingGoogle || result.snapshot.provenance === 'sample'}
 						on:click={syncGoogleCalendar}
 					>
-						{syncingGoogle ? 'Đang đồng bộ…' : 'Xác nhận và đồng bộ Google'}
+						{result.snapshot.provenance === 'sample'
+							? 'Không thể đồng bộ dữ liệu mẫu'
+							: syncingGoogle
+								? 'Đang đồng bộ…'
+								: 'Xác nhận và đồng bộ Google'}
 					</button>
 					{#if googleResult}
 						<p class="sync-counts">
 							Thêm {googleResult.inserted} · Sửa {googleResult.patched} · Xóa
-							{googleResult.deleted} · Không đổi {googleResult.unchanged}
+							{googleResult.deleted} · Chặn xóa {googleResult.skippedDeletes} · Không đổi
+							{googleResult.unchanged}
 						</p>
 					{/if}
 					<p class="sync-message" aria-live="polite">{googleMessage}</p>
@@ -279,8 +304,15 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 				<div>
 					<h3>Apple Calendar và ứng dụng khác</h3>
 					<p>Tải file một lần; thay đổi sau này không tự cập nhật.</p>
-					<button class="secondary-button" type="button" on:click={downloadIcalendar}>
-						Tải file .ics
+					<button
+						class="secondary-button"
+						type="button"
+						disabled={result.snapshot.provenance === 'sample'}
+						on:click={downloadIcalendar}
+					>
+						{result.snapshot.provenance === 'sample'
+							? 'Không thể xuất dữ liệu mẫu'
+							: 'Tải file .ics'}
 					</button>
 					<p class="sync-message" aria-live="polite">{calendarExportMessage}</p>
 				</div>

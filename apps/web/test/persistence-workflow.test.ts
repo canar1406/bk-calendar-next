@@ -110,4 +110,15 @@ describe('persisted web import workflow', () => {
 		assert.equal(stored?.acceptedSnapshot?.fingerprint, accepted.snapshot.fingerprint);
 		assert.equal(stored?.pendingSnapshot?.fingerprint, incoming.snapshot.fingerprint);
 	});
+
+	it('rejects sample snapshots transferred from any external source', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const sample = await prepareTimetable(source, undefined, {
+			capturedAt: '2026-09-03T00:00:00.000Z',
+			provenance: 'sample'
+		});
+
+		await assert.rejects(stageTransferredSnapshot(store, sample.snapshot), /dữ liệu mẫu/i);
+		assert.deepEqual(await store.list(), []);
+	});
 });

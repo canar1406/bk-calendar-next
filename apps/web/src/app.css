@@ -303,6 +303,16 @@ button:disabled {
 	font-size: 0.85rem;
 }
 
+.sample-warning {
+	margin: 14px 0 0;
+	padding: 14px 16px;
+	color: #7c2d35;
+	background: #fff5f5;
+	border-left: 3px solid var(--red);
+	font-size: 0.82rem;
+	line-height: 1.6;
+}
+
 .extension-handoff-message {
 	min-height: 1.5em;
 	margin: -28px 0 28px;

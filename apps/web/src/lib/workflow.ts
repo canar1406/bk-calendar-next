@@ -40,6 +40,9 @@ export async function stageTimetableImport(
 	source: string,
 	options: PrepareTimetableOptions = {}
 ): Promise<PreparedTimetable & { profile: SyncProfile }> {
+	if (options.provenance === 'sample') {
+		throw new Error('Dữ liệu mẫu không được lưu làm thời khóa biểu của người dùng.');
+	}
 	const snapshot = await createStudent2024Snapshot(source, options);
 	return await stageTransferredSnapshot(store, snapshot);
 }
@@ -48,6 +51,9 @@ export async function stageTransferredSnapshot(
 	store: ProfileStore,
 	snapshot: TimetableSnapshot
 ): Promise<PreparedTimetable & { profile: SyncProfile }> {
+	if (snapshot.provenance === 'sample') {
+		throw new Error('Dữ liệu mẫu không được lưu làm thời khóa biểu của người dùng.');
+	}
 	const staged = await stageSnapshot(store, snapshot);
 	return {
 		profileId: staged.profileId,
@@ -59,4 +65,19 @@ export async function stageTransferredSnapshot(
 
 function profileIdFor(snapshot: TimetableSnapshot): string {
 	return `${snapshot.sourceKind}:${snapshot.semester}`;
+}
+
+export function inferCaptureCompleteness(source: string) {
+	const parsedRows = source
+		.replaceAll('\r\n', '\n')
+		.replaceAll('\r', '\n')
+		.split('\n')
+		.filter((line) => /^\d{5}\t/u.test(line) && line.split('\t').length === 12).length;
+	const footer = /Trình bày từ dòng\s+\d+\s+đến\s+\d+\s*\/\s*(\d+)\s+dòng/iu.exec(source);
+	if (!footer) return { state: 'unknown' as const, parsedRows };
+
+	const expectedRows = Number(footer[1]);
+	return parsedRows >= expectedRows
+		? { state: 'complete' as const, parsedRows, expectedRows }
+		: { state: 'incomplete' as const, parsedRows, expectedRows };
 }

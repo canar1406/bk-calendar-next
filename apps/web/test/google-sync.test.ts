@@ -191,6 +191,106 @@ describe('Google profile sync workflow', () => {
 		assert.equal(stored?.acceptedSnapshot?.fingerprint, accepted.fingerprint);
 		assert.equal(stored?.pendingSnapshot?.fingerprint, pending.fingerprint);
 	});
+
+	it('does not promote when remote stale events are skipped even if accepted matches pending', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const accepted = await snapshot([event], {
+			state: 'complete',
+			parsedRows: 1,
+			expectedRows: 1
+		});
+		const pending = await createSnapshot({
+			...accepted,
+			capturedAt: '2026-09-03T00:00:00.000Z',
+			completeness: { state: 'unknown', parsedRows: 1 },
+			events: accepted.events
+		});
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			calendarId: 'calendar-id',
+			acceptedSnapshot: accepted,
+			pendingSnapshot: pending
+		});
+		const staleRemote = { ...event, stableKey: 'bk2_sample', fingerprint: 'sample' };
+		const gateway: GoogleCalendarGateway = {
+			async listManagedEvents() {
+				return [remote(event), remote(staleRemote)];
+			},
+			async insertEvent(_calendarId, localEvent) {
+				return remote(localEvent);
+			},
+			async patchEvent(_calendarId, _eventId, localEvent) {
+				return remote(localEvent);
+			},
+			async deleteEvent() {
+				throw new Error('deletion must remain blocked');
+			}
+		};
+
+		const synced = await syncPendingProfile(store, 'student-2024:261', {
+			gateway,
+			async createCalendar() {
+				throw new Error('must not create another calendar');
+			}
+		});
+
+		assert.equal(synced.result.skippedDeletes, 1);
+		assert.equal(synced.promoted, false);
+		assert.equal(
+			(await store.get('student-2024:261'))?.pendingSnapshot?.fingerprint,
+			pending.fingerprint
+		);
+	});
+
+	it('rejects sample snapshots before creating or modifying a Google calendar', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = await createSnapshot({
+			sourceKind: 'student-2024',
+			semester: 261,
+			capturedAt: '2026-09-03T00:00:00.000Z',
+			provenance: 'sample',
+			completeness: { state: 'complete', parsedRows: 1, expectedRows: 1 },
+			warnings: [],
+			events: [event]
+		});
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			pendingSnapshot: pending
+		});
+		let gatewayCalls = 0;
+
+		await assert.rejects(
+			syncPendingProfile(store, 'student-2024:261', {
+				gateway: {
+					async listManagedEvents() {
+						gatewayCalls += 1;
+						return [];
+					},
+					async insertEvent(_calendarId, localEvent) {
+						return remote(localEvent);
+					},
+					async patchEvent(_calendarId, _eventId, localEvent) {
+						return remote(localEvent);
+					},
+					async deleteEvent() {}
+				},
+				async createCalendar() {
+					gatewayCalls += 1;
+					return { id: 'must-not-exist' };
+				}
+			}),
+			/dữ liệu mẫu/i
+		);
+		assert.equal(gatewayCalls, 0);
+	});
 });
 
 function remote(localEvent: ManagedEvent): ManagedGoogleEvent {

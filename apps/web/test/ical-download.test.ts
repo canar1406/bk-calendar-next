@@ -143,4 +143,20 @@ describe('web iCalendar export', () => {
 			'revoke:blob:calendar'
 		]);
 	});
+
+	it('does not create an export from a sample snapshot', async () => {
+		const sampleSnapshot = await createSnapshot({
+			sourceKind: 'student-2024',
+			semester: 261,
+			capturedAt: '2026-09-03T00:00:00.000Z',
+			provenance: 'sample',
+			warnings: [],
+			events: []
+		});
+
+		assert.throws(
+			() => createIcalendarExport(sampleSnapshot, 'BKalendar • HK 261'),
+			/dữ liệu mẫu/i
+		);
+	});
 });

@@ -30,6 +30,9 @@ export async function syncPendingProfile(
 	if (!stored.pendingSnapshot) throw new Error('Không có thời khóa biểu đang chờ đồng bộ.');
 
 	const pendingSnapshot = stored.pendingSnapshot;
+	if (pendingSnapshot.provenance === 'sample') {
+		throw new Error('Dữ liệu mẫu chỉ dùng để xem trước và không thể đồng bộ Google Calendar.');
+	}
 	let profile = stored;
 	let calendarId = stored.calendarId;
 
@@ -51,8 +54,7 @@ export async function syncPendingProfile(
 			...(dependencies.onProgress ? { onProgress: dependencies.onProgress } : {})
 		}
 	);
-	const hasBlockedRemovals = diff.removed.length > 0 && !diff.canDelete;
-	const promoted = result.failed.length === 0 && !hasBlockedRemovals;
+	const promoted = result.failed.length === 0 && result.skippedDeletes === 0;
 
 	if (promoted) {
 		const { pendingSnapshot: _pendingSnapshot, ...withoutPending } = profile;

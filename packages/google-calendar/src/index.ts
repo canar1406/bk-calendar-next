@@ -32,6 +32,7 @@ export interface SyncResult {
 	inserted: number;
 	patched: number;
 	deleted: number;
+	skippedDeletes: number;
 	unchanged: number;
 	failed: SyncFailure[];
 }
@@ -48,7 +49,14 @@ export async function syncManagedCalendar(
 
 	const remoteByKey = new Map(remoteEvents.map((event) => [event.stableKey, event]));
 	const localByKey = new Map(localEvents.map((event) => [event.stableKey, event]));
-	const result: SyncResult = { inserted: 0, patched: 0, deleted: 0, unchanged: 0, failed: [] };
+	const result: SyncResult = {
+		inserted: 0,
+		patched: 0,
+		deleted: 0,
+		skippedDeletes: 0,
+		unchanged: 0,
+		failed: []
+	};
 	const added = localEvents.filter((event) => !remoteByKey.has(event.stableKey)).sort(byStableKey);
 	const existing = localEvents
 		.filter((event) => remoteByKey.has(event.stableKey))
@@ -105,6 +113,8 @@ export async function syncManagedCalendar(
 				options.onProgress
 			);
 		}
+	} else {
+		result.skippedDeletes = removed.length;
 	}
 
 	return result;

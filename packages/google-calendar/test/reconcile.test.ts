@@ -104,4 +104,15 @@ describe('managed Google Calendar reconciliation', () => {
 			{ operation: 'insert', stableKey: 'MT1003' }
 		);
 	});
+
+	it('reports remote events that were intentionally not deleted', async () => {
+		const { api, calls } = gateway([remote('sample-id', 'CO1027', 'sample')]);
+		const result = await syncManagedCalendar(api, 'calendar-1', [], {
+			allowDeletes: false
+		});
+
+		assert.deepEqual(calls, []);
+		assert.equal(result.deleted, 0);
+		assert.equal(result.skippedDeletes, 1);
+	});
 });
