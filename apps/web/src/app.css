@@ -303,6 +303,14 @@ button:disabled {
 	font-size: 0.85rem;
 }
 
+.extension-handoff-message {
+	min-height: 1.5em;
+	margin: -28px 0 28px;
+	color: var(--blue-dark);
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
 .snapshot-summary {
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
@@ -520,6 +528,71 @@ footer {
 	border-top: 1px solid var(--line);
 	font-family: 'IBM Plex Mono', monospace;
 	font-size: 0.68rem;
+}
+
+.legal-page {
+	width: min(820px, calc(100% - 40px));
+	padding: 72px 0 96px;
+}
+
+.legal-page header {
+	margin: 34px 0 48px;
+	padding-bottom: 28px;
+	border-bottom: 1px solid var(--line);
+}
+
+.legal-page h1 {
+	margin: 0;
+	font-size: clamp(2.4rem, 7vw, 4.8rem);
+	line-height: 1.05;
+	letter-spacing: -0.055em;
+}
+
+.legal-page header p,
+.legal-page section p,
+.legal-page li {
+	color: var(--muted);
+	line-height: 1.8;
+}
+
+.legal-page header p {
+	margin: 16px 0 0;
+}
+
+.legal-page section {
+	margin-top: 38px;
+}
+
+.legal-page h2 {
+	margin: 0 0 12px;
+	font-size: 1.25rem;
+	letter-spacing: -0.025em;
+}
+
+.legal-page section p,
+.legal-page ul {
+	margin: 0;
+}
+
+.legal-page li + li {
+	margin-top: 8px;
+}
+
+.legal-page a {
+	color: var(--blue);
+}
+
+.legal-page code {
+	padding: 2px 5px;
+	background: #e8f1f7;
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 0.88em;
+}
+
+.legal-back {
+	font-size: 0.84rem;
+	font-weight: 600;
+	text-decoration: none;
 }
 
 @media (max-width: 900px) {

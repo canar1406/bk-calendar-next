@@ -41,8 +41,14 @@ export async function stageTimetableImport(
 	options: PrepareTimetableOptions = {}
 ): Promise<PreparedTimetable & { profile: SyncProfile }> {
 	const snapshot = await createStudent2024Snapshot(source, options);
-	const staged = await stageSnapshot(store, snapshot);
+	return await stageTransferredSnapshot(store, snapshot);
+}
 
+export async function stageTransferredSnapshot(
+	store: ProfileStore,
+	snapshot: TimetableSnapshot
+): Promise<PreparedTimetable & { profile: SyncProfile }> {
+	const staged = await stageSnapshot(store, snapshot);
 	return {
 		profileId: staged.profileId,
 		snapshot,

@@ -5,7 +5,11 @@ import {
 	type KeyValueStorage,
 	type SyncProfile
 } from '../../../packages/timetable/src/storage.ts';
-import { prepareTimetable, stageTimetableImport } from '../src/lib/workflow.ts';
+import {
+	prepareTimetable,
+	stageTransferredSnapshot,
+	stageTimetableImport
+} from '../src/lib/workflow.ts';
 
 const source = `20261 - Học kỳ 1 Năm học 2026 - 2027(Hiện hành)
 Ngày cập nhật gần nhất của HK này: 28/08/2026 14:57:54
@@ -76,5 +80,34 @@ describe('persisted web import workflow', () => {
 
 		await assert.rejects(stageTimetableImport(store, 'dữ liệu không hợp lệ'), /table/i);
 		assert.deepEqual(await store.get(profile.profileId), profile);
+	});
+
+	it('stages an extension snapshot while preserving the accepted snapshot and calendar ID', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const accepted = await prepareTimetable(source, undefined, {
+			capturedAt: '2026-09-02T00:00:00.000Z',
+			completeness: { state: 'complete', parsedRows: 1, expectedRows: 1 }
+		});
+		await store.save({
+			schemaVersion: 1,
+			profileId: accepted.profileId,
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			calendarId: 'calendar-id',
+			acceptedSnapshot: accepted.snapshot
+		});
+		const incoming = await prepareTimetable(source.replace('H1-GĐH1', 'H1-101'), undefined, {
+			capturedAt: '2026-09-03T00:00:00.000Z',
+			completeness: { state: 'complete', parsedRows: 1, expectedRows: 1 }
+		});
+
+		const staged = await stageTransferredSnapshot(store, incoming.snapshot);
+		const stored = await store.get(accepted.profileId);
+
+		assert.equal(staged.diff.changed.length, 1);
+		assert.equal(stored?.calendarId, 'calendar-id');
+		assert.equal(stored?.acceptedSnapshot?.fingerprint, accepted.snapshot.fingerprint);
+		assert.equal(stored?.pendingSnapshot?.fingerprint, incoming.snapshot.fingerprint);
 	});
 });

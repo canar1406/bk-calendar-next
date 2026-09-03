@@ -22,7 +22,11 @@ export interface PopupViewModel {
 	deletionBlocked: boolean;
 	warning?: string;
 	actionLabel: string;
+	actionUrl: string;
 }
+
+export const MYBK_TIMETABLE_URL = 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb';
+export const WEB_REVIEW_URL = 'https://canar1406.github.io/bk-calendar-next/?from=extension';
 
 export function selectCurrentProfile(
 	profiles: StoredProfileSummary[]
@@ -43,7 +47,8 @@ export function buildPopupViewModel(
 			detail: 'Mở trang thời khóa biểu MyBK để tiện ích đọc và lưu bản xem trước cục bộ.',
 			counts: emptyCounts,
 			deletionBlocked: false,
-			actionLabel: 'Mở thời khóa biểu MyBK'
+			actionLabel: 'Mở thời khóa biểu MyBK',
+			actionUrl: MYBK_TIMETABLE_URL
 		};
 	}
 
@@ -55,7 +60,8 @@ export function buildPopupViewModel(
 			capturedLabel: formatDateTime(status.checkedAt),
 			counts: emptyCounts,
 			deletionBlocked: false,
-			actionLabel: 'Mở MyBK để thử lại'
+			actionLabel: 'Mở MyBK để thử lại',
+			actionUrl: MYBK_TIMETABLE_URL
 		};
 	}
 
@@ -97,7 +103,8 @@ export function buildPopupViewModel(
 		counts,
 		deletionBlocked,
 		...(warning ? { warning } : {}),
-		actionLabel: deletionBlocked ? 'Mở MyBK để đọc đủ dữ liệu' : 'Mở MyBK để đối chiếu'
+		actionLabel: 'Xem lại trên BKalendar',
+		actionUrl: WEB_REVIEW_URL
 	};
 }
 

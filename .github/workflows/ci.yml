@@ -50,3 +50,13 @@ jobs:
 
       - name: Build all workspaces
         run: pnpm build
+
+      - name: Package Chrome and Edge extension
+        run: node scripts/package-extension.mjs
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bkalendar-next-extension-chrome-edge
+          path: artifacts/bkalendar-next-extension-chrome-edge.zip
+          if-no-files-found: error

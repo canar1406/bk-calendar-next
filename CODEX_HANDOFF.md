@@ -38,7 +38,7 @@ Latest verified commands:
 
 ```text
 pnpm exec prettier --check .                 pass
-pnpm test                                    85 pass, 0 fail
+pnpm test                                    101 pass, 0 fail
 pnpm check                                   pass
 pnpm build                                   pass
 BASE_PATH=/bkalendar-next pnpm --filter @bkalendar-next/web build
@@ -58,7 +58,6 @@ Still not complete:
   browser client ID and authorized origins;
 - extension must be manually loaded and tested on the real authenticated MyBK
   timetable page in Chrome and Edge;
-- extension-to-web full review/confirmation handoff is not implemented;
 - real calendar imports still need manual Google/Apple integration testing;
 - no production deployment or extension-store release has occurred.
 

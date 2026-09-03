@@ -70,6 +70,21 @@ The extension requests only local storage and the specific MyBK timetable
 page. It detects and reviews changes locally; it does not silently write to
 Google Calendar.
 
+Create one ZIP compatible with both Chrome and Edge:
+
+```bash
+pnpm package:extension
+```
+
+The package is written to:
+
+```text
+artifacts/bkalendar-next-extension-chrome-edge.zip
+```
+
+CI also uploads this ZIP as the `bkalendar-next-extension-chrome-edge`
+workflow artifact.
+
 ## Google OAuth
 
 No credentials are committed to this repository. A browser OAuth client must

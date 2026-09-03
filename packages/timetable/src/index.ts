@@ -208,3 +208,18 @@ async function sha256(value: string): Promise<string> {
 	const hash = await crypto.subtle.digest('SHA-256', bytes);
 	return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
+
+export {
+	EXTENSION_TRANSFER_REQUEST_TYPE,
+	EXTENSION_TRANSFER_RESPONSE_TYPE,
+	EXTENSION_TRANSFER_VERSION,
+	createExtensionTransferEmptyResponse,
+	createExtensionTransferRequest,
+	createExtensionTransferResponse,
+	isExtensionTransferRequest,
+	isExtensionTransferResponse,
+	type ExtensionTransferEmptyResponse,
+	type ExtensionTransferReadyResponse,
+	type ExtensionTransferRequest,
+	type ExtensionTransferResponse
+} from './transfer.ts';

@@ -271,6 +271,20 @@ h2 {
 	outline-offset: 3px;
 }
 
+.secondary-action {
+	justify-self: center;
+	color: #35557e;
+	font-size: 12px;
+	font-weight: 700;
+	text-underline-offset: 3px;
+}
+
+.secondary-action:focus-visible {
+	border-radius: 4px;
+	outline: 3px solid #8ab4f8;
+	outline-offset: 3px;
+}
+
 .privacy-note {
 	color: #65738a;
 	font-size: 11px;

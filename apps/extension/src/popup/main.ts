@@ -52,6 +52,7 @@ async function renderStoredState(): Promise<void> {
 	warning.hidden = viewModel.warning === undefined;
 	warningText.textContent = viewModel.warning ?? '';
 	primaryAction.textContent = viewModel.actionLabel;
+	primaryAction.href = viewModel.actionUrl;
 }
 
 function requireElement<T extends HTMLElement>(id: string): T {

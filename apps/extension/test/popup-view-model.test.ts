@@ -84,7 +84,11 @@ describe('extension popup view model', () => {
 			removed: 1
 		});
 		assert.equal(viewModel.deletionBlocked, false);
-		assert.equal(viewModel.actionLabel, 'Mở MyBK để đối chiếu');
+		assert.equal(viewModel.actionLabel, 'Xem lại trên BKalendar');
+		assert.equal(
+			viewModel.actionUrl,
+			'https://canar1406.github.io/bk-calendar-next/?from=extension'
+		);
 	});
 
 	it('clearly blocks possible removals when the capture is incomplete', () => {
@@ -110,7 +114,11 @@ describe('extension popup view model', () => {
 			viewModel.warning,
 			'Đang chặn xóa 3 mục vì MyBK mới đọc 4/12 dòng. Hãy mở đủ tất cả trang dữ liệu rồi kiểm tra lại.'
 		);
-		assert.equal(viewModel.actionLabel, 'Mở MyBK để đọc đủ dữ liệu');
+		assert.equal(viewModel.actionLabel, 'Xem lại trên BKalendar');
+		assert.equal(
+			viewModel.actionUrl,
+			'https://canar1406.github.io/bk-calendar-next/?from=extension'
+		);
 	});
 
 	it('uses a safe empty state before the first local capture', () => {
@@ -121,6 +129,10 @@ describe('extension popup view model', () => {
 		assert.deepEqual(viewModel.counts, { added: 0, changed: 0, removed: 0 });
 		assert.equal(viewModel.deletionBlocked, false);
 		assert.equal(viewModel.actionLabel, 'Mở thời khóa biểu MyBK');
+		assert.equal(
+			viewModel.actionUrl,
+			'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb'
+		);
 	});
 
 	it('keeps extraction errors local and offers only a retry action', () => {
@@ -134,5 +146,9 @@ describe('extension popup view model', () => {
 		assert.equal(viewModel.title, 'Chưa đọc được lịch');
 		assert.equal(viewModel.detail, 'Không đọc được thời khóa biểu.');
 		assert.equal(viewModel.actionLabel, 'Mở MyBK để thử lại');
+		assert.equal(
+			viewModel.actionUrl,
+			'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb'
+		);
 	});
 });

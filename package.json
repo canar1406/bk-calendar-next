@@ -13,12 +13,14 @@
 		"dev": "pnpm --filter @bkalendar-next/web dev",
 		"format": "prettier --write .",
 		"lint": "prettier --check . && pnpm check",
-		"test": "node --experimental-strip-types --test packages/*/test/*.test.ts apps/*/test/*.test.ts",
-		"test:watch": "node --experimental-strip-types --test --watch packages/*/test/*.test.ts apps/*/test/*.test.ts"
+		"package:extension": "pnpm --filter @bkalendar-next/extension build && node scripts/package-extension.mjs",
+		"test": "node --experimental-strip-types --test packages/*/test/*.test.ts apps/*/test/*.test.ts scripts/test/*.test.ts",
+		"test:watch": "node --experimental-strip-types --test --watch packages/*/test/*.test.ts apps/*/test/*.test.ts scripts/test/*.test.ts"
 	},
 	"devDependencies": {
 		"@types/chrome": "latest",
 		"@types/node": "latest",
+		"fflate": "^0.8.3",
 		"prettier": "latest",
 		"prettier-plugin-svelte": "latest",
 		"typescript": "~6.0.0"

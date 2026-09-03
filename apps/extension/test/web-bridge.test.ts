@@ -1,0 +1,210 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import {
+	PROFILE_STORAGE_KEY,
+	REVIEW_ORIGIN,
+	REVIEW_PATH_PREFIX,
+	handleExtensionTransferMessage,
+	selectNewestPendingSnapshot
+} from '../src/bridge/web-review.ts';
+import type {
+	ExtensionTransferResponse,
+	TimetableSnapshot
+} from '../../../packages/timetable/src/index.ts';
+
+const olderSnapshot = snapshot('2026-09-01T01:00:00.000Z', 'older');
+const newerSnapshot = snapshot('2026-09-03T01:00:00.000Z', 'newer');
+
+describe('extension-to-web review bridge', () => {
+	it('selects the newest profile that has a pending snapshot', () => {
+		const selected = selectNewestPendingSnapshot([
+			{
+				profileId: 'without-pending',
+				lastCheckedAt: '2026-09-04T01:00:00.000Z'
+			},
+			{
+				profileId: 'older',
+				lastCheckedAt: '2026-09-01T01:00:00.000Z',
+				pendingSnapshot: olderSnapshot
+			},
+			{
+				profileId: 'newer',
+				lastCheckedAt: '2026-09-03T01:00:00.000Z',
+				pendingSnapshot: {
+					...newerSnapshot,
+					accessToken: 'nested-token-must-never-be-exposed'
+				},
+				accessToken: 'must-never-be-exposed'
+			}
+		]);
+
+		assert.deepEqual(selected, newerSnapshot);
+		assert.equal(JSON.stringify(selected).includes('must-never-be-exposed'), false);
+	});
+
+	it('responds to a valid page request with the matching nonce and newest snapshot', async () => {
+		const source = {} as MessageEventSource;
+		const responses: ExtensionTransferResponse[] = [];
+		let storageReads = 0;
+
+		const handled = await handleExtensionTransferMessage(
+			{
+				source,
+				origin: REVIEW_ORIGIN,
+				data: {
+					source: 'bkalendar-web',
+					type: 'bkalendar:request-pending-snapshot',
+					version: 1,
+					requestId: 'nonce-123'
+				}
+			},
+			{
+				windowSource: source,
+				origin: REVIEW_ORIGIN,
+				pathname: `${REVIEW_PATH_PREFIX}review`,
+				async readProfiles() {
+					storageReads += 1;
+					return [
+						{ lastCheckedAt: '2026-09-01T01:00:00.000Z', pendingSnapshot: olderSnapshot },
+						{ lastCheckedAt: '2026-09-03T01:00:00.000Z', pendingSnapshot: newerSnapshot }
+					];
+				},
+				postResponse(response) {
+					responses.push(response);
+				}
+			}
+		);
+
+		assert.equal(handled, true);
+		assert.equal(storageReads, 1);
+		assert.deepEqual(responses, [
+			{
+				source: 'bkalendar-extension',
+				type: 'bkalendar:pending-snapshot',
+				version: 1,
+				requestId: 'nonce-123',
+				status: 'ready',
+				snapshot: newerSnapshot
+			}
+		]);
+	});
+
+	it('returns an explicit empty response when no pending snapshot exists', async () => {
+		const source = {} as MessageEventSource;
+		const responses: ExtensionTransferResponse[] = [];
+
+		const handled = await handleExtensionTransferMessage(
+			{
+				source,
+				origin: REVIEW_ORIGIN,
+				data: {
+					source: 'bkalendar-web',
+					type: 'bkalendar:request-pending-snapshot',
+					version: 1,
+					requestId: 'empty-nonce'
+				}
+			},
+			{
+				windowSource: source,
+				origin: REVIEW_ORIGIN,
+				pathname: REVIEW_PATH_PREFIX,
+				async readProfiles() {
+					return [{ profileId: 'no-pending', accessToken: 'secret' }];
+				},
+				postResponse(response) {
+					responses.push(response);
+				}
+			}
+		);
+
+		assert.equal(handled, true);
+		assert.deepEqual(responses, [
+			{
+				source: 'bkalendar-extension',
+				type: 'bkalendar:pending-snapshot',
+				version: 1,
+				requestId: 'empty-nonce',
+				status: 'empty'
+			}
+		]);
+	});
+
+	it('ignores requests from another window, origin, path, or invalid protocol envelope', async () => {
+		const source = {} as MessageEventSource;
+		const otherSource = {} as MessageEventSource;
+		const validRequest = {
+			source: 'bkalendar-web',
+			type: 'bkalendar:request-pending-snapshot',
+			version: 1,
+			requestId: 'secure-nonce'
+		};
+		let storageReads = 0;
+		let responseCount = 0;
+		const baseContext = {
+			windowSource: source,
+			origin: REVIEW_ORIGIN,
+			pathname: REVIEW_PATH_PREFIX,
+			async readProfiles() {
+				storageReads += 1;
+				return [];
+			},
+			postResponse() {
+				responseCount += 1;
+			}
+		};
+
+		assert.equal(
+			await handleExtensionTransferMessage(
+				{ source: otherSource, origin: REVIEW_ORIGIN, data: validRequest },
+				baseContext
+			),
+			false
+		);
+		assert.equal(
+			await handleExtensionTransferMessage(
+				{ source, origin: 'https://evil.example', data: validRequest },
+				baseContext
+			),
+			false
+		);
+		assert.equal(
+			await handleExtensionTransferMessage(
+				{ source, origin: REVIEW_ORIGIN, data: validRequest },
+				{ ...baseContext, origin: 'https://evil.example' }
+			),
+			false
+		);
+		assert.equal(
+			await handleExtensionTransferMessage(
+				{ source, origin: REVIEW_ORIGIN, data: validRequest },
+				{ ...baseContext, pathname: '/bk-calendar-next-evil/' }
+			),
+			false
+		);
+		assert.equal(
+			await handleExtensionTransferMessage(
+				{ source, origin: REVIEW_ORIGIN, data: { ...validRequest, requestId: '' } },
+				baseContext
+			),
+			false
+		);
+		assert.equal(storageReads, 0);
+		assert.equal(responseCount, 0);
+	});
+
+	it('uses only the local profile storage key', () => {
+		assert.equal(PROFILE_STORAGE_KEY, 'bkalendar-next:profiles');
+	});
+});
+
+function snapshot(capturedAt: string, fingerprint: string): TimetableSnapshot {
+	return {
+		schemaVersion: 1,
+		sourceKind: 'student-2024',
+		semester: 261,
+		capturedAt,
+		fingerprint,
+		events: [],
+		warnings: []
+	};
+}

@@ -8,4 +8,5 @@ build/
 !.env.example
 .DS_Store
 coverage/
+artifacts/
 *.zip

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { env } from '$env/dynamic/public';
+	import { onMount } from 'svelte';
 	import {
 		GoogleCalendarRestGateway,
 		createManagedCalendar,
@@ -14,10 +15,14 @@
 	} from '../../../../packages/timetable/src/storage.ts';
 	import ChangeSummary from '$lib/components/ChangeSummary.svelte';
 	import ScheduleBoard from '$lib/components/ScheduleBoard.svelte';
+	import {
+		requestPendingSnapshotFromExtension,
+		type ExtensionMessageWindow
+	} from '$lib/extension-handoff.ts';
 	import { loadGoogleIdentity } from '$lib/google-identity.ts';
 	import { syncPendingProfile } from '$lib/google-sync.ts';
 	import { createIcalendarExport, triggerIcalendarDownload } from '$lib/ical-download.ts';
-	import { stageTimetableImport } from '$lib/workflow.ts';
+	import { stageTimetableImport, stageTransferredSnapshot } from '$lib/workflow.ts';
 
 	const sample = `20261 - Học kỳ 1 Năm học 2026 - 2027(Hiện hành)
 Ngày cập nhật gần nhất của HK này: 28/08/2026 14:57:54
@@ -37,8 +42,41 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	let googleMessage = '';
 	let googleResult: SyncResult | undefined;
 	let calendarExportMessage = '';
+	let extensionHandoffMessage = '';
 
 	const googleClientId = env.PUBLIC_GOOGLE_CLIENT_ID?.trim() ?? '';
+
+	onMount(() => {
+		void receiveExtensionSnapshot();
+	});
+
+	async function receiveExtensionSnapshot(): Promise<void> {
+		if (new URLSearchParams(window.location.search).get('from') !== 'extension') return;
+		extensionHandoffMessage = 'Đang nhận thời khóa biểu đã chụp từ extension…';
+
+		try {
+			const response = await requestPendingSnapshotFromExtension({
+				targetWindow: window as unknown as ExtensionMessageWindow
+			});
+			if (response.status === 'ready') {
+				const store = createProfileStore(createBrowserStorage(window.localStorage));
+				result = await stageTransferredSnapshot(store, response.snapshot);
+				extensionHandoffMessage =
+					'Đã nhận thời khóa biểu từ extension. Hãy xem lại thay đổi trước khi chọn nơi đồng bộ.';
+			} else if (response.status === 'empty') {
+				extensionHandoffMessage =
+					'Extension đang hoạt động nhưng chưa có thời khóa biểu chờ xem lại. Hãy mở trang TKB MyBK trước.';
+			} else if (response.status === 'timeout') {
+				extensionHandoffMessage =
+					'Không nhận được dữ liệu từ extension. Hãy kiểm tra extension đã được bật rồi thử lại.';
+			}
+		} catch (error) {
+			extensionHandoffMessage =
+				error instanceof Error
+					? `Không thể nhận dữ liệu từ extension: ${error.message}`
+					: 'Không thể nhận dữ liệu từ extension.';
+		}
+	}
 
 	async function importTimetable(): Promise<void> {
 		errorMessage = '';
@@ -165,6 +203,10 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			<li><span>04</span>Chọn đích</li>
 		</ol>
 	</section>
+
+	<p class="extension-handoff-message" role="status" aria-live="polite" aria-atomic="true">
+		{extensionHandoffMessage}
+	</p>
 
 	<section class="import-section" aria-labelledby="import-title">
 		<div class="section-heading">
