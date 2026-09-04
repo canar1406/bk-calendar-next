@@ -20,7 +20,8 @@ import {
 import {
 	GoogleCalendarRestGateway,
 	createManagedCalendar,
-	findManagedCalendars
+	findManagedCalendars,
+	syncManagedPresentation
 } from '../../../../packages/google-calendar/src/index.ts';
 import { syncPendingProfile } from '../../../../packages/google-calendar/src/profile-sync.ts';
 import { GOOGLE_WEB_CLIENT_ID, disconnectGoogle, requestGoogleToken } from './google-auth.ts';
@@ -36,7 +37,10 @@ import {
 	type TrackingNotificationKind
 } from './tracking-notification.ts';
 import { LAST_DIFF_STORAGE_KEY, createDiffLog } from '../shared/diff-log.ts';
-import { courseColorStorageKey } from '../../../../packages/google-calendar/src/course-appearance.ts';
+import {
+	courseColorStorageKey,
+	isCourseColorPreferences
+} from '../../../../packages/google-calendar/src/course-appearance.ts';
 import { prepareEventsWithCourseAppearance } from '../shared/course-appearance.ts';
 import {
 	MYBK_TIMETABLE_URL,
@@ -55,7 +59,7 @@ import {
 	isWebBridgeRuntimeRequest,
 	type WebBridgeStatePush
 } from '../shared/web-bridge-runtime.ts';
-import { detectWebBridgeConnection, WEB_APP_URL_PATTERN } from './web-bridge-presence.ts';
+import { ensureWebBridgeConnection, WEB_APP_URL_PATTERN } from './web-bridge-presence.ts';
 
 const TRACKING_ALARM = 'bkalendar-next:track-mybk';
 const TRACKING_MODE_KEY = 'bkalendar-next:tracking-mode';
@@ -111,7 +115,6 @@ chrome.notifications.onClicked.addListener((notificationId) => {
 chrome.storage.onChanged.addListener((changes, areaName) => {
 	if (areaName !== 'local') return;
 	if (hasWebStateChange(changes)) void broadcastWebState();
-	if (hasAppearanceChange(changes)) void runAutomaticPresentationCheck();
 });
 
 void hardenLocalStorage();
@@ -120,6 +123,7 @@ async function initializeExtension(): Promise<void> {
 	await hardenLocalStorage();
 	await initializeStatus();
 	await scheduleTrackingAlarm();
+	await ensureWebBridgeConnectionInOpenTabs();
 }
 
 async function handleStartup(): Promise<void> {
@@ -158,6 +162,7 @@ async function handleWebBridgeRuntimeMessage(
 			await chrome.storage.local.set({
 				[courseColorStorageKey(profileId)]: preferences
 			});
+			void syncCourseAppearanceToGoogle(profileId);
 		}
 	});
 	if (!result.handled) throw new Error('Web BKalendar không được phép truy cập bridge.');
@@ -182,15 +187,6 @@ function hasWebStateChange(changes: Record<string, chrome.storage.StorageChange>
 	);
 }
 
-function hasAppearanceChange(changes: Record<string, chrome.storage.StorageChange>): boolean {
-	return Object.keys(changes).some((key) => key.startsWith('bkalendar-next:course-colors:'));
-}
-
-async function runAutomaticPresentationCheck(): Promise<void> {
-	if ((await readTrackingMode()) !== 'auto-safe') return;
-	await runBackgroundTracking();
-}
-
 async function broadcastWebState(): Promise<void> {
 	const state = await readLocalExtensionState();
 	const message: WebBridgeStatePush = {
@@ -208,11 +204,91 @@ async function broadcastWebState(): Promise<void> {
 	);
 }
 
+async function syncCourseAppearanceToGoogle(profileId: string): Promise<void> {
+	if ((await readTrackingMode()) !== 'auto-safe') return;
+	const store = createProfileStore(createChromeStorage(chrome.storage.local));
+	const profile = await store.get(profileId);
+	const snapshot = profile?.acceptedSnapshot;
+	const calendarId = profile?.calendarId;
+	if (!profile || !snapshot || !calendarId) return;
+	const appearance = await chrome.storage.local.get(courseColorStorageKey(profileId));
+	const preferences = appearance[courseColorStorageKey(profileId)];
+	if (!isCourseColorPreferences(preferences)) return;
+
+	try {
+		const accessToken = await requestGoogleToken(
+			chrome.identity,
+			false,
+			GOOGLE_WEB_CLIENT_ID,
+			googleTokenStore
+		);
+		const result = await syncManagedPresentation(
+			new GoogleCalendarRestGateway(accessToken),
+			calendarId,
+			prepareEventsWithCourseAppearance(snapshot.events, preferences)
+		);
+		if (result.failed.length > 0) {
+			throw new Error('Google Calendar chưa áp dụng đầy đủ màu và icon môn học.');
+		}
+		if (result.patched === 0) return;
+
+		const now = new Date().toISOString();
+		const storedStatus = await chrome.storage.local.get(EXTENSION_STATUS_KEY);
+		const status = storedStatus[EXTENSION_STATUS_KEY] as ExtensionStatus | undefined;
+		if (status?.state === 'captured') {
+			await persistStatus({
+				...status,
+				capturedAt: now,
+				changes: {
+					added: 0,
+					changed: result.patched,
+					removed: 0,
+					unchanged: result.unchanged,
+					canDelete: true
+				},
+				syncState: 'applied'
+			});
+		}
+		await chrome.notifications.create(`${TRACKING_NOTIFICATION_ID}:appearance`, {
+			type: 'basic',
+			iconUrl: 'icons/icon-128.png',
+			title: 'BKalendar đã cập nhật màu và icon',
+			message: `${result.patched} sự kiện đã được cập nhật. Nhấn để xem chi tiết.`
+		});
+	} catch (error) {
+		await notifyTrackingError(
+			'BKalendar chưa cập nhật được màu và icon',
+			'Thiết lập đã lưu cục bộ nhưng Google Calendar chưa được patch. Hãy kiểm tra kết nối Google rồi thử lại.'
+		);
+		if (error instanceof Error) {
+			const storedStatus = await chrome.storage.local.get(EXTENSION_STATUS_KEY);
+			const status = storedStatus[EXTENSION_STATUS_KEY] as ExtensionStatus | undefined;
+			if (status?.state === 'captured') {
+				await persistStatus({
+					state: 'error',
+					checkedAt: new Date().toISOString(),
+					message: error.message
+				});
+			}
+		}
+	}
+}
+
 async function hasWebBridgeConnection(): Promise<boolean> {
-	return await detectWebBridgeConnection({
+	return await ensureWebBridgeConnection({
 		queryTabs: async (properties) => await chrome.tabs.query(properties),
-		sendMessage: async (tabId, message) => await chrome.tabs.sendMessage(tabId, message)
+		sendMessage: async (tabId, message) => await chrome.tabs.sendMessage(tabId, message),
+		inject: async (tabId) => {
+			await chrome.scripting.executeScript({
+				target: { tabId },
+				files: ['web-review.js']
+			});
+		}
 	});
+}
+
+async function ensureWebBridgeConnectionInOpenTabs(): Promise<void> {
+	await hasWebBridgeConnection().catch(() => false);
 }
 
 async function handlePopupMessage(message: PopupMessage): Promise<{

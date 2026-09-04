@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
 	WEB_APP_URL_PATTERN,
 	detectWebBridgeConnection,
+	ensureWebBridgeConnection,
 	type WebBridgePresenceApi
 } from '../src/background/web-bridge-presence.ts';
 
@@ -18,7 +19,8 @@ describe('web BKalendar bridge presence', () => {
 				calls.push(`ping:${tabId}:${message.type}`);
 				if (tabId === 42) return { ok: true };
 				throw new Error('stale content script');
-			}
+			},
+			async inject() {}
 		};
 
 		assert.equal(await detectWebBridgeConnection(api), true);
@@ -36,9 +38,31 @@ describe('web BKalendar bridge presence', () => {
 			},
 			async sendMessage() {
 				return undefined;
-			}
+			},
+			async inject() {}
 		};
 
 		assert.equal(await detectWebBridgeConnection(api), false);
+	});
+
+	it('injects the bridge into an already-open official tab after an extension reload', async () => {
+		const injected: number[] = [];
+		let ready = false;
+		const api: WebBridgePresenceApi = {
+			async queryTabs() {
+				return [{ id: 41 }];
+			},
+			async sendMessage() {
+				if (!ready) throw new Error('bridge is not injected');
+				return { ok: true };
+			},
+			async inject(tabId) {
+				injected.push(tabId);
+				ready = true;
+			}
+		};
+
+		assert.equal(await ensureWebBridgeConnection(api), true);
+		assert.deepEqual(injected, [41]);
 	});
 });

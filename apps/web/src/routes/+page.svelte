@@ -138,7 +138,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			diff: diffSnapshots(newest.acceptedSnapshot, snapshot),
 			profile: syncedProfile
 		};
-		loadCourseAppearance(result);
+		loadCourseAppearance(result, false);
 		if (state.status.state === 'error') {
 			extensionHandoffMessage = state.status.message;
 		}
@@ -155,7 +155,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			if (response.status === 'ready') {
 				const store = createProfileStore(createBrowserStorage(window.localStorage));
 				result = await stageTransferredSnapshot(store, response.snapshot);
-				loadCourseAppearance(result);
+				loadCourseAppearance(result, false);
 				extensionHandoffMessage =
 					'Đã nhận thời khóa biểu từ extension. Hãy xem lại thay đổi trước khi chọn nơi đồng bộ.';
 			} else if (response.status === 'empty') {
@@ -194,7 +194,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 					completeness: inferCaptureCompleteness(source),
 					provenance: 'sample'
 				});
-				loadCourseAppearance(result);
+				loadCourseAppearance(result, false);
 			} else {
 				const store = createProfileStore(createBrowserStorage(window.localStorage));
 				result = await stageTimetableImport(store, source, {
@@ -202,7 +202,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 					completeness: inferCaptureCompleteness(source),
 					provenance: 'user'
 				});
-				loadCourseAppearance(result);
+				loadCourseAppearance(result, true);
 				if (result.profile) {
 					publishProfileToExtension({
 						targetWindow: window as unknown as ExtensionMessageWindow,
@@ -229,7 +229,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		errorMessage = '';
 	}
 
-	function loadCourseAppearance(prepared: Prepared): void {
+	function loadCourseAppearance(prepared: Prepared, publish = true): void {
 		courseColorPreferences =
 			prepared.snapshot.provenance === 'sample'
 				? defaultCourseColorPreferences()
@@ -242,7 +242,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			prepared.snapshot.events,
 			courseColorPreferences
 		);
-		if (prepared.snapshot.provenance !== 'sample') {
+		if (publish && prepared.snapshot.provenance !== 'sample') {
 			publishCourseAppearanceToExtension({
 				targetWindow: window as unknown as ExtensionMessageWindow,
 				profileId: prepared.profileId,

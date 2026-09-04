@@ -9,6 +9,7 @@ export interface WebBridgePresenceApi {
 		tabId: number,
 		message: { type: typeof WEB_BRIDGE_PING_TYPE }
 	): Promise<WebBridgePingResponse | undefined>;
+	inject(tabId: number): Promise<void>;
 }
 
 export async function detectWebBridgeConnection(api: WebBridgePresenceApi): Promise<boolean> {
@@ -23,4 +24,20 @@ export async function detectWebBridgeConnection(api: WebBridgePresenceApi): Prom
 		}
 	}
 	return false;
+}
+
+export async function ensureWebBridgeConnection(api: WebBridgePresenceApi): Promise<boolean> {
+	if (await detectWebBridgeConnection(api)) return true;
+	const tabs = await api.queryTabs({ url: WEB_APP_URL_PATTERN });
+	await Promise.all(
+		tabs.map(async (tab) => {
+			if (typeof tab.id !== 'number') return;
+			try {
+				await api.sendMessage(tab.id, { type: WEB_BRIDGE_PING_TYPE });
+			} catch {
+				await api.inject(tab.id).catch(() => {});
+			}
+		})
+	);
+	return await detectWebBridgeConnection(api);
 }

@@ -40,6 +40,61 @@ export interface SyncResult {
 	failed: SyncFailure[];
 }
 
+export interface PresentationSyncResult {
+	patched: number;
+	unchanged: number;
+	missing: number;
+	failed: SyncFailure[];
+}
+
+export async function syncManagedPresentation(
+	gateway: GoogleCalendarGateway,
+	calendarId: string,
+	localEvents: ManagedEvent[]
+): Promise<PresentationSyncResult> {
+	if (!calendarId.trim() || calendarId === 'primary') {
+		throw new Error('BKalendar từ chối cập nhật presentation trên lịch không an toàn.');
+	}
+	const remoteEvents = await gateway.listManagedEvents(calendarId);
+	const remoteByKey = new Map<string, ManagedGoogleEvent>();
+	for (const remoteEvent of [...remoteEvents].sort(byRemoteIdentity)) {
+		if (!remoteByKey.has(remoteEvent.stableKey)) {
+			remoteByKey.set(remoteEvent.stableKey, remoteEvent);
+		}
+	}
+	assertUnique(localEvents, (event) => event.stableKey, 'local presentation');
+	const result: PresentationSyncResult = {
+		patched: 0,
+		unchanged: 0,
+		missing: 0,
+		failed: []
+	};
+
+	for (const event of [...localEvents].sort(byStableKey)) {
+		const remote = remoteByKey.get(event.stableKey);
+		if (!remote) {
+			result.missing++;
+			continue;
+		}
+		if (remote.fingerprint === event.fingerprint) {
+			result.unchanged++;
+			continue;
+		}
+		try {
+			await gateway.patchEvent(calendarId, remote.id, event, remote.etag);
+			result.patched++;
+		} catch (error) {
+			result.failed.push({
+				operation: 'patch',
+				stableKey: event.stableKey,
+				eventId: remote.id,
+				message: error instanceof Error ? error.message : String(error)
+			});
+		}
+	}
+	return result;
+}
+
 export async function syncManagedCalendar(
 	gateway: GoogleCalendarGateway,
 	calendarId: string,

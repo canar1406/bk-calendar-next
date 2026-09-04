@@ -25,5 +25,8 @@ describe('web extension introduction', () => {
 		assert.match(source, /TKB MyBK mới nhất, diff thay đổi và trạng thái đồng bộ/);
 		assert.match(source, /courseAppearanceSummary/);
 		assert.match(source, /colorName/);
+		assert.match(source, /loadCourseAppearance\(result, false\)/);
+		assert.match(source, /function loadCourseAppearance\(prepared: Prepared, publish = true\)/);
+		assert.match(source, /loadCourseAppearance\(result, true\)/);
 	});
 });

@@ -136,48 +136,54 @@ export function selectNewestPendingSnapshot(value: unknown): TimetableSnapshot |
 }
 
 if (typeof window !== 'undefined' && typeof chrome !== 'undefined') {
-	window.addEventListener('message', (event) => {
-		void handleExtensionTransferMessage(event, {
-			windowSource: window,
-			origin: window.location.origin,
-			pathname: window.location.pathname,
-			async readProfiles() {
-				return await sendBackgroundRequest({
-					type: 'bkalendar:web-bridge:profiles:get'
-				});
-			},
-			async readExtensionState() {
-				return (await sendBackgroundRequest({
-					type: 'bkalendar:web-bridge:state:get'
-				})) as ExtensionState;
-			},
-			async writeProfile(profile) {
-				await sendBackgroundRequest({
-					type: 'bkalendar:web-bridge:profile:save',
-					profile
-				});
-			},
-			async writeCourseAppearance(profileId, preferences) {
-				await sendBackgroundRequest({
-					type: 'bkalendar:web-bridge:appearance:save',
-					profileId,
-					preferences
-				});
-			},
-			postResponse(response) {
-				window.postMessage(response, REVIEW_ORIGIN);
-			}
+	const bridgeScope = globalThis as typeof globalThis & {
+		__bkalendarWebBridgeInstalled?: boolean;
+	};
+	if (!bridgeScope.__bkalendarWebBridgeInstalled) {
+		bridgeScope.__bkalendarWebBridgeInstalled = true;
+		window.addEventListener('message', (event) => {
+			void handleExtensionTransferMessage(event, {
+				windowSource: window,
+				origin: window.location.origin,
+				pathname: window.location.pathname,
+				async readProfiles() {
+					return await sendBackgroundRequest({
+						type: 'bkalendar:web-bridge:profiles:get'
+					});
+				},
+				async readExtensionState() {
+					return (await sendBackgroundRequest({
+						type: 'bkalendar:web-bridge:state:get'
+					})) as ExtensionState;
+				},
+				async writeProfile(profile) {
+					await sendBackgroundRequest({
+						type: 'bkalendar:web-bridge:profile:save',
+						profile
+					});
+				},
+				async writeCourseAppearance(profileId, preferences) {
+					await sendBackgroundRequest({
+						type: 'bkalendar:web-bridge:appearance:save',
+						profileId,
+						preferences
+					});
+				},
+				postResponse(response) {
+					window.postMessage(response, REVIEW_ORIGIN);
+				}
+			});
 		});
-	});
 
-	chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-		if (isWebBridgePing(message)) {
-			sendResponse({ ok: true });
-			return;
-		}
-		if (!isWebBridgeStatePush(message)) return;
-		window.postMessage(createExtensionStateUpdate(message.state), REVIEW_ORIGIN);
-	});
+		chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+			if (isWebBridgePing(message)) {
+				sendResponse({ ok: true });
+				return;
+			}
+			if (!isWebBridgeStatePush(message)) return;
+			window.postMessage(createExtensionStateUpdate(message.state), REVIEW_ORIGIN);
+		});
+	}
 }
 
 function isTimetableSnapshot(value: unknown): value is TimetableSnapshot {
