@@ -215,6 +215,38 @@ describe('background MyBK CAS client', () => {
 		assert.match(capture.raw, /AS1002/);
 	});
 
+	it('accepts a CAS login form when optional hidden fields are omitted', async () => {
+		const minimalCasForm = `
+			<form action="https://sso.hcmut.edu.vn/cas/login" method="post">
+				<input name="password" type="password" />
+			</form>`;
+		const client = new ScriptedClient([
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
+				status: 200,
+				body: myBkLoginHtml
+			},
+			{ url: 'https://sso.hcmut.edu.vn/cas/login', status: 200, body: minimalCasForm },
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/',
+				status: 200,
+				body: '<html>Đăng nhập thành công</html>'
+			},
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
+				status: 200,
+				body: timetableHtml
+			}
+		]);
+
+		const capture = await fetchMyBkTimetable(client, {
+			username: 'student',
+			password: 'secret'
+		});
+
+		assert.match(capture.raw, /AS1002/);
+	});
+
 	it('falls back to the direct HTTPS CAS entry when MyBK emits an insecure login redirect', async () => {
 		const client = new InitialFailureClient([
 			{

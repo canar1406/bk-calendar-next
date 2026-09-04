@@ -128,11 +128,7 @@ function parseCasLoginForm(response: MyBkHttpResponse): {
 }
 
 function looksLikeCasForm(html: string): boolean {
-	return (
-		/\bname=["']lt["']/iu.test(html) &&
-		/\bname=["']execution["']/iu.test(html) &&
-		/\bname=["']password["']/iu.test(html)
-	);
+	return /\bname\s*=\s*(["'])password\1/iu.test(html) || /\bname\s*=\s*password\b/iu.test(html);
 }
 
 function attribute(source: string, name: string): string | undefined {
