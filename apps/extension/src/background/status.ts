@@ -18,6 +18,7 @@ export type ExtensionStatus =
 			sourceUpdatedAt?: string;
 			completeness: CaptureCompleteness;
 			changes?: ChangeCounts;
+			syncState?: 'review' | 'applied';
 	  }
 	| {
 			state: 'error';
@@ -28,14 +29,16 @@ export type ExtensionStatus =
 export function createCaptureStatus(
 	capture: MyBkCapture,
 	capturedAt: string,
-	changes?: ChangeCounts
+	changes?: ChangeCounts,
+	syncState?: 'review' | 'applied'
 ): ExtensionStatus {
 	return {
 		state: 'captured',
 		capturedAt,
 		...(capture.sourceUpdatedAt ? { sourceUpdatedAt: capture.sourceUpdatedAt } : {}),
 		completeness: structuredClone(capture.completeness),
-		...(changes ? { changes: structuredClone(changes) } : {})
+		...(changes ? { changes: structuredClone(changes) } : {}),
+		...(syncState ? { syncState } : {})
 	};
 }
 

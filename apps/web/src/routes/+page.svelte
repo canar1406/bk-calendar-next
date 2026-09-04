@@ -5,6 +5,7 @@
 	import {
 		GoogleCalendarRestGateway,
 		createManagedCalendar,
+		findManagedCalendars,
 		requestGoogleAccessToken,
 		revokeGoogleAccessToken,
 		type SyncResult
@@ -160,6 +161,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			const store = createProfileStore(createBrowserStorage(window.localStorage));
 			const synced = await syncPendingProfile(store, result.profileId, {
 				gateway: new GoogleCalendarRestGateway(accessToken),
+				findCalendars: async (summary) => await findManagedCalendars(fetch, accessToken, summary),
 				createCalendar: async (summary) => await createManagedCalendar(fetch, accessToken, summary),
 				onProgress(progress) {
 					googleResult = { ...progress, failed: [...progress.failed] };
@@ -215,6 +217,45 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			<li class:active={result !== undefined}><span>03</span>So sánh</li>
 			<li><span>04</span>Chọn đích</li>
 		</ol>
+	</section>
+
+	<section id="extension-intro" class="extension-intro" aria-labelledby="extension-intro-title">
+		<div class="extension-intro-copy">
+			<div class="extension-kicker">
+				<span class="section-number">EXT</span>
+				<span class="extension-status">Chrome · Edge · MV3</span>
+			</div>
+			<h2 id="extension-intro-title">Theo dõi MyBK tự động</h2>
+			<p>
+				Cài extension BKalendar để kiểm tra thời khóa biểu nền và tự cập nhật Google Calendar khi
+				MyBK thay đổi — không cần sao chép lại mỗi lần.
+			</p>
+			<a
+				class="extension-cta"
+				href="https://github.com/canar1406/bk-calendar-next"
+				target="_blank"
+				rel="noreferrer"
+			>
+				Xem hướng dẫn cài extension
+				<span aria-hidden="true">↗</span>
+			</a>
+		</div>
+		<div class="extension-benefits">
+			<div>
+				<strong>Tự động cập nhật Google Calendar</strong>
+				<span>Patch đúng lịch BKalendar, không tạo bản sao mỗi lần kiểm tra.</span>
+			</div>
+			<div>
+				<strong>Không gửi mật khẩu lên máy chủ BKalendar</strong>
+				<span
+					>Nếu bật theo dõi nền, thông tin đăng nhập được mã hóa và giữ trên thiết bị của bạn.</span
+				>
+			</div>
+			<div>
+				<strong>Bạn luôn kiểm soát</strong>
+				<span>Chọn tắt theo dõi, xem diff, hoặc chỉ nhận thông báo sau khi cập nhật.</span>
+			</div>
+		</div>
 	</section>
 
 	<p class="extension-handoff-message" role="status" aria-live="polite" aria-atomic="true">

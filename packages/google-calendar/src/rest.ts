@@ -25,6 +25,8 @@ export interface GoogleCalendarResource {
 	summary: string;
 	description?: string;
 	timeZone?: string;
+	primary?: boolean;
+	deleted?: boolean;
 }
 
 export function toGoogleEventResource(event: ManagedEvent): GoogleEventResource {
@@ -62,6 +64,43 @@ export async function createManagedCalendar(
 			timeZone: 'Asia/Ho_Chi_Minh'
 		})
 	});
+}
+
+export async function findManagedCalendars(
+	fetcher: typeof fetch,
+	accessToken: string,
+	summary: string
+): Promise<Array<{ id: string }>> {
+	const calendars: Array<{ id: string }> = [];
+	let pageToken: string | undefined;
+	do {
+		const query = new URLSearchParams({
+			minAccessRole: 'writer',
+			showDeleted: 'false',
+			showHidden: 'true',
+			maxResults: '250'
+		});
+		if (pageToken) query.set('pageToken', pageToken);
+		const response = await requestJson<{
+			items?: GoogleCalendarResource[];
+			nextPageToken?: string;
+		}>(fetcher, accessToken, `${API_BASE}/users/me/calendarList?${query}`);
+		for (const calendar of response.items ?? []) {
+			if (
+				!calendar.id ||
+				calendar.id === 'primary' ||
+				calendar.primary ||
+				calendar.deleted ||
+				calendar.summary !== summary ||
+				!calendar.description?.includes(`Managed by ${MANAGED_BY}.`)
+			) {
+				continue;
+			}
+			calendars.push({ id: calendar.id });
+		}
+		pageToken = response.nextPageToken;
+	} while (pageToken);
+	return calendars.sort((left, right) => left.id.localeCompare(right.id));
 }
 
 export class GoogleCalendarRestGateway implements GoogleCalendarGateway {

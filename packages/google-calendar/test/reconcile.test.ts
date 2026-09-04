@@ -69,6 +69,39 @@ describe('managed Google Calendar reconciliation', () => {
 		);
 	});
 
+	it('removes duplicate managed copies while preserving one canonical event', async () => {
+		const { api, calls } = gateway([
+			remote('event-a', 'MT1003', 'same'),
+			remote('event-b', 'MT1003', 'same')
+		]);
+
+		const result = await syncManagedCalendar(api, 'calendar-1', [local('MT1003', 'same')]);
+
+		assert.deepEqual(calls, ['delete:event-b']);
+		assert.deepEqual(
+			{
+				deleted: result.deleted,
+				unchanged: result.unchanged,
+				skippedDeletes: result.skippedDeletes
+			},
+			{ deleted: 1, unchanged: 1, skippedDeletes: 0 }
+		);
+	});
+
+	it('does not remove duplicate managed copies when deletion is blocked', async () => {
+		const { api, calls } = gateway([
+			remote('event-a', 'MT1003', 'same'),
+			remote('event-b', 'MT1003', 'same')
+		]);
+
+		const result = await syncManagedCalendar(api, 'calendar-1', [local('MT1003', 'same')], {
+			allowDeletes: false
+		});
+
+		assert.deepEqual(calls, []);
+		assert.equal(result.skippedDeletes, 1);
+	});
+
 	it('inserts new, patches changed and deletes removed managed events', async () => {
 		const { api, calls } = gateway([
 			remote('physics-id', 'PH1003', 'old'),

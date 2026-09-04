@@ -45,9 +45,13 @@ export async function syncManagedCalendar(
 ): Promise<SyncResult> {
 	const remoteEvents = await gateway.listManagedEvents(calendarId);
 	assertUnique(localEvents, (event) => event.stableKey, 'local');
-	assertUnique(remoteEvents, (event) => event.stableKey, 'remote');
 
-	const remoteByKey = new Map(remoteEvents.map((event) => [event.stableKey, event]));
+	const remoteByKey = new Map<string, ManagedGoogleEvent>();
+	const duplicateRemoteEvents: ManagedGoogleEvent[] = [];
+	for (const event of [...remoteEvents].sort(byRemoteIdentity)) {
+		if (remoteByKey.has(event.stableKey)) duplicateRemoteEvents.push(event);
+		else remoteByKey.set(event.stableKey, event);
+	}
 	const localByKey = new Map(localEvents.map((event) => [event.stableKey, event]));
 	const result: SyncResult = {
 		inserted: 0,
@@ -61,9 +65,10 @@ export async function syncManagedCalendar(
 	const existing = localEvents
 		.filter((event) => remoteByKey.has(event.stableKey))
 		.sort(byStableKey);
-	const removed = remoteEvents
+	const removed = [...remoteByKey.values()]
 		.filter((event) => !localByKey.has(event.stableKey))
-		.sort((a, b) => a.stableKey.localeCompare(b.stableKey));
+		.concat(duplicateRemoteEvents)
+		.sort(byRemoteIdentity);
 
 	for (const event of added) {
 		await execute(
@@ -155,6 +160,10 @@ function byStableKey(a: ManagedEvent, b: ManagedEvent): number {
 	return a.stableKey.localeCompare(b.stableKey);
 }
 
+function byRemoteIdentity(a: ManagedGoogleEvent, b: ManagedGoogleEvent): number {
+	return a.stableKey.localeCompare(b.stableKey) || a.id.localeCompare(b.id);
+}
+
 export {
 	CALENDAR_SCOPE,
 	requestGoogleAccessToken,
@@ -168,6 +177,7 @@ export {
 	GoogleCalendarRestGateway,
 	MANAGED_BY,
 	createManagedCalendar,
+	findManagedCalendars,
 	toGoogleEventResource,
 	type GoogleCalendarResource,
 	type GoogleEventResource

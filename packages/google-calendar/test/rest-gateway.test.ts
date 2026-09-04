@@ -4,6 +4,7 @@ import {
 	GoogleCalendarRestGateway,
 	MANAGED_BY,
 	createManagedCalendar,
+	findManagedCalendars,
 	toGoogleEventResource
 } from '../src/rest.ts';
 import type { ManagedEvent } from '../../timetable/src/index.ts';
@@ -63,6 +64,36 @@ describe('Google Calendar REST payload', () => {
 		assert.equal(calls[0]?.url, 'https://www.googleapis.com/calendar/v3/calendars');
 		assert.equal(calls[0]?.init?.method, 'POST');
 		assert.equal((calls[0]?.init?.headers as Record<string, string>).Authorization, 'Bearer token');
+	});
+
+	it('finds an existing managed semester calendar and excludes personal calendars', async () => {
+		const fetcher: typeof fetch = async (input) => {
+			assert.match(String(input), /calendarList/);
+			return response({
+				items: [
+					{
+						id: 'primary',
+						primary: true,
+						summary: 'BKalendar • HK 261',
+						description: `Managed by ${MANAGED_BY}.`
+					},
+					{
+						id: 'managed-calendar-id',
+						summary: 'BKalendar • HK 261',
+						description: `Managed by ${MANAGED_BY}. Các sự kiện trong lịch này được BKalendar cập nhật.`
+					},
+					{
+						id: 'personal-calendar-id',
+						summary: 'BKalendar • HK 261',
+						description: 'Lịch cá nhân có tên giống BKalendar'
+					}
+				]
+			});
+		};
+
+		assert.deepEqual(await findManagedCalendars(fetcher, 'token', 'BKalendar • HK 261'), [
+			{ id: 'managed-calendar-id' }
+		]);
 	});
 });
 

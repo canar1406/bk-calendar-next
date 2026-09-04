@@ -44,4 +44,29 @@ describe('extension capture workflow', () => {
 		assert.equal(JSON.stringify(profile).includes(capture.raw), false);
 		assert.equal(staged.diff.canDelete, true);
 	});
+
+	it('keeps different MyBK semesters in separate profiles', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		await stageMyBkCapture(store, capture, '2026-09-02T01:00:00.000Z');
+		await stageMyBkCapture(
+			store,
+			{
+				...capture,
+				raw: capture.raw
+					.replaceAll('20261', '20262')
+					.replace('Học kỳ 1', 'Học kỳ 2')
+					.replace('MT1003', 'PH1004')
+					.replace('Giải tích 1', 'Thí nghiệm Vật lý')
+			},
+			'2027-01-15T01:00:00.000Z'
+		);
+
+		const firstSemester = await store.get('student-2024:261');
+		const secondSemester = await store.get('student-2024:262');
+
+		assert.equal(firstSemester?.pendingSnapshot?.events[0]?.courseCode, 'MT1003');
+		assert.equal(secondSemester?.pendingSnapshot?.events[0]?.courseCode, 'PH1004');
+		assert.equal(firstSemester?.pendingSnapshot?.semester, 261);
+		assert.equal(secondSemester?.pendingSnapshot?.semester, 262);
+	});
 });

@@ -27,7 +27,7 @@
 		<ul>
 			<li>Chỉ xử lý dữ liệu mà bạn có quyền truy cập.</li>
 			<li>Kiểm tra nội dung thay đổi trước khi xác nhận ghi vào Google Calendar.</li>
-			<li>Không chia sẻ mật khẩu, cookie, access token hoặc client secret với ứng dụng.</li>
+			<li>Chỉ bật lưu đăng nhập MyBK trong extension nếu bạn chấp nhận cơ chế mã hóa cục bộ.</li>
 			<li>Kiểm tra lại lịch chính thức của trường khi có thông tin quan trọng.</li>
 		</ul>
 	</section>

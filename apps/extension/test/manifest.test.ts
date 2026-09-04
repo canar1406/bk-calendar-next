@@ -4,8 +4,13 @@ import { describe, it } from 'node:test';
 
 interface ExtensionManifest {
 	manifest_version: number;
+	key?: string;
 	permissions?: string[];
 	host_permissions?: string[];
+	oauth2?: {
+		client_id?: string;
+		scopes?: string[];
+	};
 	background?: {
 		service_worker?: string;
 		type?: string;
@@ -23,22 +28,34 @@ interface ExtensionManifest {
 
 const manifestPath = new URL('../manifest.json', import.meta.url);
 const myBkTimetableUrl = 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb*';
+const myBkLoginUrl = 'https://mybk.hcmut.edu.vn/app/login*';
+const hcmutSsoUrl = 'https://sso.hcmut.edu.vn/cas/login*';
 const reviewUrl = 'https://canar1406.github.io/bk-calendar-next/*';
+const googleCalendarApiUrl = 'https://www.googleapis.com/calendar/v3/*';
 
 async function readManifest(): Promise<ExtensionManifest> {
 	return JSON.parse(await readFile(manifestPath, 'utf8')) as ExtensionManifest;
 }
 
 describe('MV3 manifest', () => {
-	it('uses only local storage and the narrow MyBK timetable host permission', async () => {
+	it('uses local storage, alarms, and only the MyBK/CAS hosts needed for background tracking', async () => {
 		const manifest = await readManifest();
 
 		assert.equal(manifest.manifest_version, 3);
-		assert.deepEqual(manifest.permissions, ['storage']);
-		assert.deepEqual(manifest.host_permissions, [myBkTimetableUrl, reviewUrl]);
+		assert.deepEqual(manifest.permissions, ['storage', 'alarms', 'notifications', 'identity']);
+		assert.deepEqual(manifest.host_permissions, [
+			myBkTimetableUrl,
+			myBkLoginUrl,
+			hcmutSsoUrl,
+			reviewUrl,
+			googleCalendarApiUrl
+		]);
 		assert.equal(JSON.stringify(manifest).includes('<all_urls>'), false);
-		assert.equal(JSON.stringify(manifest).includes('alarms'), false);
-		assert.equal(JSON.stringify(manifest).includes('identity'), false);
+		assert.ok((manifest.key?.length ?? 0) > 300);
+		assert.match(manifest.oauth2?.client_id ?? '', /\.apps\.googleusercontent\.com$/);
+		assert.deepEqual(manifest.oauth2?.scopes, [
+			'https://www.googleapis.com/auth/calendar.app.created'
+		]);
 	});
 
 	it('wires the local background, content, and popup build outputs', async () => {

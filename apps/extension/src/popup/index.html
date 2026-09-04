@@ -49,6 +49,11 @@
 						<span>Có thể xóa</span>
 					</article>
 				</div>
+
+				<div id="diff-details" class="diff-details" hidden>
+					<h3>Chi tiết thay đổi gần nhất</h3>
+					<ul id="diff-list"></ul>
+				</div>
 			</section>
 
 			<aside id="deletion-warning" class="warning" role="status" hidden>
@@ -58,6 +63,67 @@
 					<p id="deletion-warning-text"></p>
 				</div>
 			</aside>
+
+			<section class="settings-card" aria-labelledby="settings-title">
+				<div class="section-heading">
+					<h2 id="settings-title">Theo dõi MyBK</h2>
+					<span id="credential-state" class="local-badge">Chưa cấu hình</span>
+				</div>
+
+				<label class="field" for="tracking-mode">
+					<span>Chế độ cập nhật</span>
+					<select id="tracking-mode">
+						<option value="off">Tắt theo dõi</option>
+						<option value="review" selected>Phát hiện và hỏi trước</option>
+						<option value="auto-safe">Tự động cập nhật và báo sau</option>
+					</select>
+				</label>
+
+				<div class="google-connection">
+					<div>
+						<strong>Google Calendar</strong>
+						<span id="google-state">Chưa kết nối</span>
+					</div>
+					<div class="google-actions">
+						<button id="connect-google" type="button">Kết nối</button>
+						<button id="disconnect-google" type="button">Ngắt</button>
+					</div>
+				</div>
+
+				<form id="credential-form" class="credential-form">
+					<label class="field" for="mybk-username">
+						<span>Tài khoản HCMUT</span>
+						<input
+							id="mybk-username"
+							name="username"
+							type="text"
+							autocomplete="username"
+							required
+						/>
+					</label>
+					<label class="field" for="mybk-password">
+						<span>Mật khẩu MyBK</span>
+						<input
+							id="mybk-password"
+							name="password"
+							type="password"
+							autocomplete="current-password"
+							required
+						/>
+					</label>
+					<label class="consent" for="credential-consent">
+						<input id="credential-consent" type="checkbox" required />
+						<span>
+							Cho phép mã hóa và lưu thông tin đăng nhập trên thiết bị để kiểm tra MyBK trong nền.
+						</span>
+					</label>
+					<p id="credential-message" class="credential-message" role="status"></p>
+					<div class="settings-actions">
+						<button id="save-credentials" type="submit">Lưu và kiểm tra ngay</button>
+						<button id="remove-credentials" type="button">Xóa đăng nhập</button>
+					</div>
+				</form>
+			</section>
 
 			<a
 				id="primary-action"
@@ -79,8 +145,8 @@
 			</a>
 
 			<p class="privacy-note">
-				Popup chỉ giúp đối chiếu dữ liệu đã lưu cục bộ. Hành động này không ghi Google Calendar,
-				không dùng OAuth và không lưu mật khẩu hay token.
+				Mật khẩu được mã hóa cục bộ và không đồng bộ cloud. BKalendar chỉ tự thêm/sửa trong lịch do
+				BKalendar tạo; chỉ tự xóa event BKalendar khi MyBK trả về đầy đủ dữ liệu.
 			</p>
 		</main>
 		<script type="module" src="./main.ts"></script>

@@ -36,7 +36,9 @@
 		<p>
 			Dữ liệu này được lưu trong <code>localStorage</code> của website hoặc
 			<code>chrome.storage.local</code> của tiện ích trên thiết bị của bạn. BKalendar không yêu cầu hoặc
-			lưu mật khẩu MyBK, cookie đăng nhập hay refresh token Google.
+			lưu mật khẩu MyBK trong website. Nếu bạn chủ động bật theo dõi nền trong extension, username và
+			mật khẩu MyBK được mã hóa bằng AES-GCM và lưu cục bộ để extension đăng nhập CAS HCMUT; dữ liệu này
+			không được gửi tới máy chủ BKalendar. Cookie đăng nhập và refresh token Google không được lưu.
 		</p>
 	</section>
 
@@ -56,6 +58,11 @@
 			Tiện ích chỉ chạy trên URL thời khóa biểu MyBK và website BKalendar được khai báo trong
 			manifest. Khi bạn chọn xem lại, pending snapshot được truyền cục bộ giữa extension và website
 			bằng một message có nonce; thời khóa biểu không được đặt trong URL.
+		</p>
+		<p>
+			Khi bạn bật theo dõi nền, extension có thể gửi thông tin đăng nhập đã được bạn nhập và cho
+			phép đến hệ thống CAS HCMUT để tạo phiên MyBK. BKalendar Next không nhận dữ liệu này qua máy
+			chủ trung gian.
 		</p>
 	</section>
 

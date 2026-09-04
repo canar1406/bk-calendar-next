@@ -109,6 +109,75 @@ describe('Google profile sync workflow', () => {
 		assert.equal(stored?.lastSyncedAt, '2026-09-02T01:00:00.000Z');
 	});
 
+	it('reuses an existing managed semester calendar instead of creating a duplicate', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = await snapshot([event], {
+			state: 'complete',
+			parsedRows: 1,
+			expectedRows: 1
+		});
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			pendingSnapshot: pending
+		});
+		let createCalls = 0;
+		const synced = await syncPendingProfile(store, 'student-2024:261', {
+			gateway: emptyGateway(),
+			async findCalendars(summary) {
+				assert.equal(summary, 'BKalendar • HK 261');
+				return [{ id: 'existing-calendar-id' }];
+			},
+			async createCalendar() {
+				createCalls += 1;
+				return { id: 'duplicate-calendar-id' };
+			}
+		});
+
+		assert.equal(createCalls, 0);
+		assert.equal(synced.profile.calendarId, 'existing-calendar-id');
+		assert.equal((await store.get('student-2024:261'))?.calendarId, 'existing-calendar-id');
+	});
+
+	it('refuses to synchronize into the personal primary calendar even if storage is tampered', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = await snapshot([event], {
+			state: 'complete',
+			parsedRows: 1,
+			expectedRows: 1
+		});
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			calendarId: 'primary',
+			pendingSnapshot: pending
+		});
+		let gatewayCalls = 0;
+
+		await assert.rejects(
+			syncPendingProfile(store, 'student-2024:261', {
+				gateway: {
+					...emptyGateway(),
+					async listManagedEvents() {
+						gatewayCalls += 1;
+						return [];
+					}
+				},
+				async createCalendar() {
+					throw new Error('must not create a calendar');
+				}
+			}),
+			/lịch cá nhân mặc định/
+		);
+		assert.equal(gatewayCalls, 0);
+	});
+
 	it('keeps the pending snapshot when a Google write fails', async () => {
 		const store = createProfileStore(new MemoryStorage());
 		const pending = await snapshot([event], {
@@ -315,5 +384,20 @@ function failingGateway(): GoogleCalendarGateway {
 		async deleteEvent() {
 			throw new Error('Google delete failed');
 		}
+	};
+}
+
+function emptyGateway(): GoogleCalendarGateway {
+	return {
+		async listManagedEvents() {
+			return [];
+		},
+		async insertEvent(_calendarId, localEvent) {
+			return remote(localEvent);
+		},
+		async patchEvent(_calendarId, _eventId, localEvent) {
+			return remote(localEvent);
+		},
+		async deleteEvent() {}
 	};
 }

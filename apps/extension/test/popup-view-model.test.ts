@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+	buildStoredDiffDetails,
 	buildPopupViewModel,
 	selectCurrentProfile,
 	summarizeStoredProfiles,
@@ -30,6 +31,87 @@ const currentProfile: StoredProfileSummary = {
 };
 
 describe('extension popup view model', () => {
+	it('builds a detailed diff that can be opened from a notification', () => {
+		const baseEvent = {
+			stableKey: 'physics',
+			fingerprint: 'old',
+			sourceKind: 'student-2024',
+			semester: 261,
+			courseCode: 'PH1003',
+			group: 'L12',
+			sessionOrdinal: 0,
+			weekday: 3,
+			title: 'Vật lý 1',
+			location: 'H3-301',
+			start: '2026-08-25T05:00:00.000Z',
+			end: '2026-08-25T07:50:00.000Z',
+			timeZone: 'Asia/Ho_Chi_Minh',
+			activeWeekIndexes: [0, 2],
+			excludedStarts: ['2026-09-01T05:00:00.000Z'],
+			metadata: { courseCode: 'PH1003' }
+		} as const;
+		const details = buildStoredDiffDetails([
+			{
+				schemaVersion: 1,
+				profileId: 'student-2024:261',
+				sourceKind: 'student-2024',
+				semester: 261,
+				calendarName: 'BKalendar • HK 261',
+				lastCheckedAt: '2026-09-04T01:00:00.000Z',
+				acceptedSnapshot: {
+					schemaVersion: 1,
+					sourceKind: 'student-2024',
+					semester: 261,
+					capturedAt: '2026-09-03T01:00:00.000Z',
+					fingerprint: 'before',
+					warnings: [],
+					completeness: { state: 'complete', parsedRows: 2, expectedRows: 2 },
+					events: [
+						baseEvent,
+						{
+							...baseEvent,
+							stableKey: 'removed',
+							fingerprint: 'removed',
+							courseCode: 'AS1001',
+							title: 'Nhập môn Vẽ kỹ thuật'
+						}
+					]
+				},
+				pendingSnapshot: {
+					schemaVersion: 1,
+					sourceKind: 'student-2024',
+					semester: 261,
+					capturedAt: '2026-09-04T01:00:00.000Z',
+					fingerprint: 'after',
+					warnings: [],
+					completeness: { state: 'complete', parsedRows: 2, expectedRows: 2 },
+					events: [
+						{
+							...baseEvent,
+							fingerprint: 'new',
+							location: 'H3-302'
+						},
+						{
+							...baseEvent,
+							stableKey: 'added',
+							fingerprint: 'added',
+							courseCode: 'PE1013',
+							title: 'Bóng bàn'
+						}
+					]
+				}
+			}
+		]);
+
+		assert.deepEqual(
+			details.map((detail) => detail.kind),
+			['added', 'changed', 'removed']
+		);
+		assert.match(details[0]?.title ?? '', /PE1013/);
+		assert.match(details[1]?.description ?? '', /H3-301 → H3-302/);
+		assert.match(details[2]?.title ?? '', /AS1001/);
+	});
+
 	it('extracts only safe display fields from persisted profiles', () => {
 		const profiles = summarizeStoredProfiles([
 			{
@@ -89,6 +171,17 @@ describe('extension popup view model', () => {
 			viewModel.actionUrl,
 			'https://canar1406.github.io/bk-calendar-next/?from=extension'
 		);
+	});
+
+	it('shows an automatic diff as already applied instead of asking for review', () => {
+		const viewModel = buildPopupViewModel(
+			{ ...capturedStatus, syncState: 'applied' },
+			currentProfile
+		);
+
+		assert.equal(viewModel.title, 'Đã tự động cập nhật');
+		assert.match(viewModel.detail, /đã được ghi vào Google Calendar/);
+		assert.equal(viewModel.actionLabel, 'Xem diff chi tiết');
 	});
 
 	it('clearly blocks possible removals when the capture is incomplete', () => {

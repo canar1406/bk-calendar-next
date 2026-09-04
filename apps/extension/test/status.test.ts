@@ -66,4 +66,21 @@ describe('extension capture status', () => {
 		});
 		assert.equal(JSON.stringify(status).includes(capture.raw), false);
 	});
+
+	it('records when a complete diff was already applied automatically', () => {
+		const capture: MyBkCapture = {
+			raw: 'never persist this raw value',
+			completeness: { state: 'complete', parsedRows: 1, expectedRows: 1 }
+		};
+		const status = createCaptureStatus(
+			capture,
+			'2026-09-03T01:00:00.000Z',
+			{ added: 1, changed: 0, removed: 0, unchanged: 7, canDelete: true },
+			'applied'
+		);
+
+		assert.equal(status.state, 'captured');
+		assert.equal(status.syncState, 'applied');
+		assert.equal(JSON.stringify(status).includes(capture.raw), false);
+	});
 });

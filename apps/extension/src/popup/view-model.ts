@@ -1,4 +1,10 @@
 import type { ExtensionStatus } from '../background/status.ts';
+import {
+	diffSnapshots,
+	type ManagedEvent,
+	type TimetableSnapshot
+} from '../../../../packages/timetable/src/index.ts';
+import { readStoredDiffLog, type DiffDetail } from '../shared/diff-log.ts';
 
 export interface StoredProfileSummary {
 	profileId: string;
@@ -73,6 +79,7 @@ export function buildPopupViewModel(
 			}
 		: emptyCounts;
 	const total = counts.added + counts.changed + counts.removed;
+	const alreadyApplied = status.syncState === 'applied';
 	const deletionBlocked =
 		counts.removed > 0 &&
 		(status.changes?.canDelete === false || status.completeness.state !== 'complete');
@@ -84,14 +91,16 @@ export function buildPopupViewModel(
 
 	return {
 		tone: status.completeness.state === 'complete' ? 'complete' : 'warning',
-		title:
-			status.changes === undefined
+		title: alreadyApplied
+			? 'Đã tự động cập nhật'
+			: status.changes === undefined
 				? 'Đã lưu bản xem trước cục bộ'
 				: total === 0
 					? 'Không có thay đổi'
 					: `${total} thay đổi cần xem lại`,
-		detail:
-			status.changes === undefined
+		detail: alreadyApplied
+			? `${total} thay đổi đã được ghi vào Google Calendar. Mở diff bên dưới để xem chi tiết.`
+			: status.changes === undefined
 				? `Đã đọc ${status.completeness.parsedRows} dòng từ MyBK.`
 				: `${status.changes.unchanged} mục không đổi. Chưa có dữ liệu nào được ghi vào Google Calendar.`,
 		...(profile
@@ -103,8 +112,8 @@ export function buildPopupViewModel(
 		counts,
 		deletionBlocked,
 		...(warning ? { warning } : {}),
-		actionLabel: 'Xem lại trên BKalendar',
-		actionUrl: WEB_REVIEW_URL
+		actionLabel: alreadyApplied ? 'Xem diff chi tiết' : 'Xem lại trên BKalendar',
+		actionUrl: alreadyApplied ? '#diff-details' : WEB_REVIEW_URL
 	};
 }
 
@@ -141,6 +150,117 @@ export function summarizeStoredProfiles(value: unknown): StoredProfileSummary[] 
 			}
 		];
 	});
+}
+
+export function buildStoredDiffDetails(value: unknown, lastDiff?: unknown): DiffDetail[] {
+	const storedLog = readStoredDiffLog(lastDiff);
+	if (storedLog?.details.length) return storedLog.details;
+	const profile = selectNewestProfileWithPendingSnapshot(value);
+	if (!profile) return [];
+	try {
+		const diff = diffSnapshots(profile.acceptedSnapshot, profile.pendingSnapshot);
+		return [
+			...diff.added.map(({ after }) => ({
+				kind: 'added' as const,
+				title: eventTitle(after),
+				description: `Thêm ${eventSchedule(after)}`
+			})),
+			...diff.changed.map(({ before, after, changedFields }) => ({
+				kind: 'changed' as const,
+				title: eventTitle(after),
+				description: describeChangedFields(before, after, changedFields)
+			})),
+			...diff.removed.map(({ before }) => ({
+				kind: 'removed' as const,
+				title: eventTitle(before),
+				description: `Không còn thấy ${eventSchedule(before)} trên MyBK`
+			}))
+		];
+	} catch {
+		return [];
+	}
+}
+
+function selectNewestProfileWithPendingSnapshot(
+	value: unknown
+): { acceptedSnapshot?: TimetableSnapshot; pendingSnapshot: TimetableSnapshot } | undefined {
+	if (!Array.isArray(value)) return undefined;
+	return value
+		.flatMap((item) => {
+			if (!item || typeof item !== 'object') return [];
+			const profile = item as Record<string, unknown>;
+			if (!isSnapshot(profile.pendingSnapshot)) return [];
+			return [
+				{
+					...(isSnapshot(profile.acceptedSnapshot)
+						? { acceptedSnapshot: profile.acceptedSnapshot }
+						: {}),
+					pendingSnapshot: profile.pendingSnapshot,
+					lastCheckedAt: typeof profile.lastCheckedAt === 'string' ? profile.lastCheckedAt : ''
+				}
+			];
+		})
+		.sort((a, b) => timestamp(b.lastCheckedAt) - timestamp(a.lastCheckedAt))[0];
+}
+
+function isSnapshot(value: unknown): value is TimetableSnapshot {
+	if (!value || typeof value !== 'object') return false;
+	const snapshot = value as Partial<TimetableSnapshot>;
+	return (
+		snapshot.schemaVersion === 1 &&
+		typeof snapshot.semester === 'number' &&
+		typeof snapshot.sourceKind === 'string' &&
+		typeof snapshot.capturedAt === 'string' &&
+		typeof snapshot.fingerprint === 'string' &&
+		Array.isArray(snapshot.events)
+	);
+}
+
+function eventTitle(event: ManagedEvent): string {
+	return `${event.courseCode} · ${event.title}`;
+}
+
+function eventSchedule(event: ManagedEvent): string {
+	return `${weekdayLabel(event.weekday)}, ${timeLabel(event.start)}–${timeLabel(event.end)}, ${event.location || 'chưa có phòng'}`;
+}
+
+function describeChangedFields(
+	before: ManagedEvent,
+	after: ManagedEvent,
+	changedFields: string[]
+): string {
+	const descriptions: string[] = [];
+	if (changedFields.includes('location')) {
+		descriptions.push(`Phòng: ${before.location || 'chưa có'} → ${after.location || 'chưa có'}`);
+	}
+	if (changedFields.includes('start') || changedFields.includes('end')) {
+		descriptions.push(
+			`Giờ: ${timeLabel(before.start)}–${timeLabel(before.end)} → ${timeLabel(after.start)}–${timeLabel(after.end)}`
+		);
+	}
+	if (changedFields.includes('activeWeekIndexes') || changedFields.includes('excludedStarts')) {
+		descriptions.push('Tuần học đã thay đổi');
+	}
+	if (changedFields.includes('title')) {
+		descriptions.push(`Tên môn: ${before.title} → ${after.title}`);
+	}
+	if (changedFields.includes('metadata')) descriptions.push('Thông tin lớp đã thay đổi');
+	return descriptions.join(' · ') || 'Nội dung buổi học đã thay đổi';
+}
+
+function weekdayLabel(weekday: number): string {
+	if (weekday === 8) return 'Chủ nhật';
+	return `Thứ ${weekday}`;
+}
+
+function timeLabel(value: string): string {
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return 'không rõ giờ';
+	return new Intl.DateTimeFormat('vi-VN', {
+		timeZone: 'Asia/Ho_Chi_Minh',
+		hour: '2-digit',
+		minute: '2-digit'
+	}).format(date);
 }
 
 function deletionWarning(
