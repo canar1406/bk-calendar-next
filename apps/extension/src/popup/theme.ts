@@ -1,6 +1,8 @@
 import {
 	normalizeThemePreference,
+	normalizeResolvedTheme,
 	resolveTheme,
+	THEME_RESOLVED_STORAGE_KEY,
 	THEME_STORAGE_KEY,
 	type ThemePreference
 } from '../shared/theme.ts';
@@ -21,14 +23,27 @@ export function createPopupThemeController(
 } {
 	return {
 		async initialize() {
-			const stored = await storage.get(THEME_STORAGE_KEY);
-			const preference = normalizeThemePreference(stored[THEME_STORAGE_KEY]);
+			const [storedPreference, storedResolved] = await Promise.all([
+				storage.get(THEME_STORAGE_KEY),
+				storage.get(THEME_RESOLVED_STORAGE_KEY)
+			]);
+			const preference = normalizeThemePreference(storedPreference[THEME_STORAGE_KEY]);
+			const syncedResolvedTheme = normalizeResolvedTheme(
+				storedResolved[THEME_RESOLVED_STORAGE_KEY]
+			);
 			select.value = preference;
-			root.dataset.theme = resolveTheme(preference, systemPrefersDark());
+			root.dataset.theme =
+				preference === 'system' && syncedResolvedTheme
+					? syncedResolvedTheme
+					: resolveTheme(preference, systemPrefersDark());
 		},
 		async update(preference) {
-			await storage.set({ [THEME_STORAGE_KEY]: preference });
-			root.dataset.theme = resolveTheme(preference, systemPrefersDark());
+			const resolved = resolveTheme(preference, systemPrefersDark());
+			await storage.set({
+				[THEME_STORAGE_KEY]: preference,
+				[THEME_RESOLVED_STORAGE_KEY]: resolved
+			});
+			root.dataset.theme = resolved;
 		}
 	};
 }

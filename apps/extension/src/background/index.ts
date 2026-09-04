@@ -5,7 +5,11 @@ import {
 	type ExtensionStatus
 } from './status.ts';
 import { stageMyBkCapture } from './capture-workflow.ts';
-import { createProfileStore } from '../../../../packages/timetable/src/storage.ts';
+import {
+	createProfileStore,
+	type ProfileStore,
+	type SyncProfile
+} from '../../../../packages/timetable/src/storage.ts';
 import { isContentMessage, isPopupMessage, type PopupMessage } from '../shared/messages.ts';
 import { createChromeStorage } from '../storage/chrome.ts';
 import { createChromeCredentialVault } from '../auth/chrome-vault.ts';
@@ -19,6 +23,7 @@ import {
 } from './tracking-policy.ts';
 import {
 	GoogleCalendarRestGateway,
+	GoogleCalendarApiError,
 	createManagedCalendar,
 	findLegacyCalendars,
 	findManagedCalendars,
@@ -71,11 +76,16 @@ import {
 	normalizeSelectedSourceKind,
 	sourceOptionFor
 } from '../shared/source-kind.ts';
+import {
+	syncPresentationWithCalendarRecovery,
+	throwIfCalendarMissing
+} from './presentation-recovery.ts';
 
 const TRACKING_ALARM = 'bkalendar-next:track-mybk';
 const TRACKING_MODE_KEY = 'bkalendar-next:tracking-mode';
 const POLLING_INTERVAL_KEY = 'bkalendar-next:polling-interval-minutes';
 const THEME_STORAGE_KEY = 'bkalendar-next:theme';
+const THEME_RESOLVED_STORAGE_KEY = 'bkalendar-next:theme-resolved';
 const COURSE_APPEARANCE_STORAGE_PREFIX = 'bkalendar-next:course-colors:';
 const DEFAULT_TRACKING_MODE: TrackingMode = 'review';
 let activeTrackingRun: Promise<void> | undefined;
@@ -190,8 +200,11 @@ async function handleWebBridgeRuntimeMessage(
 				setTimeout(() => appearanceWritesInFlight.delete(profileId), 1_000);
 			}
 		},
-		async saveTheme(preference) {
-			await chrome.storage.local.set({ [THEME_STORAGE_KEY]: preference });
+		async saveTheme(preference, resolvedTheme) {
+			await chrome.storage.local.set({
+				[THEME_STORAGE_KEY]: preference,
+				[THEME_RESOLVED_STORAGE_KEY]: resolvedTheme
+			});
 		}
 	});
 	if (!result.handled) throw new Error('Web BKalendar không được phép truy cập bridge.');
@@ -270,11 +283,19 @@ async function syncCourseAppearanceToGoogle(profileId: string): Promise<void> {
 			GOOGLE_WEB_CLIENT_ID,
 			googleTokenStore,
 			async (accessToken) => {
-				const attempt = await syncManagedPresentation(
-					new GoogleCalendarRestGateway(accessToken),
+				const gateway = new GoogleCalendarRestGateway(accessToken);
+				const recovered = await syncPresentationWithCalendarRecovery({
 					calendarId,
-					prepareEventsWithCourseAppearance(snapshot.events, preferences)
-				);
+					sync: async (activeCalendarId) =>
+						await syncManagedPresentation(
+							gateway,
+							activeCalendarId,
+							prepareEventsWithCourseAppearance(snapshot.events, preferences)
+						),
+					recover: async () => await recoverCalendarForProfile(store, profile, accessToken)
+				});
+				const attempt = recovered.result;
+				throwIfCalendarMissing(attempt.failed);
 				const authFailure = attempt.failed.find((failure) =>
 					isGoogleCalendarAuthError(new Error(failure.message))
 				);
@@ -313,10 +334,17 @@ async function syncCourseAppearanceToGoogle(profileId: string): Promise<void> {
 			message: `${result.patched} sự kiện đã được cập nhật. Nhấn để xem chi tiết.`
 		});
 	} catch (error) {
-		await notifyTrackingError(
-			'BKalendar chưa cập nhật được màu và icon',
-			'Thiết lập đã lưu cục bộ nhưng Google Calendar chưa được patch. Hãy kiểm tra kết nối Google rồi thử lại.'
-		);
+		if (error instanceof GoogleCalendarApiError && error.status === 404) {
+			await notifyTrackingError(
+				'Calendar BKalendar cũ không còn tồn tại',
+				'BKalendar đã thử tìm lại calendar của tài khoản Google hiện tại nhưng chưa thể cập nhật. Hãy chạy kiểm tra TKB để tạo lại sự kiện.'
+			);
+		} else {
+			await notifyTrackingError(
+				'BKalendar chưa cập nhật được màu và icon',
+				'Thiết lập đã lưu cục bộ nhưng Google Calendar chưa được patch. Hãy kiểm tra kết nối Google rồi thử lại.'
+			);
+		}
 		if (error instanceof Error) {
 			const storedStatus = await chrome.storage.local.get(EXTENSION_STATUS_KEY);
 			const status = storedStatus[EXTENSION_STATUS_KEY] as ExtensionStatus | undefined;
@@ -329,6 +357,28 @@ async function syncCourseAppearanceToGoogle(profileId: string): Promise<void> {
 			}
 		}
 	}
+}
+
+async function recoverCalendarForProfile(
+	store: ProfileStore,
+	profile: SyncProfile,
+	accessToken: string
+): Promise<string> {
+	const managed = (await findManagedCalendars(fetch, accessToken, profile.calendarName))[0];
+	if (managed?.id) {
+		await store.save({ ...profile, calendarId: managed.id, calendarOrigin: 'managed' });
+		return managed.id;
+	}
+	const legacy = (
+		await findLegacyCalendars(fetch, accessToken, profile.sourceKind, profile.semester)
+	)[0];
+	if (legacy?.id) {
+		await store.save({ ...profile, calendarId: legacy.id, calendarOrigin: 'legacy' });
+		return legacy.id;
+	}
+	const created = await createManagedCalendar(fetch, accessToken, profile.calendarName);
+	await store.save({ ...profile, calendarId: created.id, calendarOrigin: 'managed' });
+	return created.id;
 }
 
 async function hasWebBridgeConnection(): Promise<boolean> {

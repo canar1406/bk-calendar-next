@@ -73,10 +73,11 @@ export interface PublishProfileOptions {
 
 export function publishThemeToExtension(
 	targetWindow: Pick<ExtensionMessageWindow, 'location' | 'postMessage'>,
-	preference: 'light' | 'dark' | 'system'
+	preference: 'light' | 'dark' | 'system',
+	resolvedTheme: 'light' | 'dark'
 ): void {
 	targetWindow.postMessage(
-		{ type: 'bkalendar:web-bridge:theme:save', preference },
+		{ type: 'bkalendar:web-bridge:theme:save', preference, resolvedTheme },
 		targetWindow.location.origin
 	);
 }

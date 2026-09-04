@@ -88,9 +88,8 @@ window.addEventListener(
 );
 
 async function initializePopup(): Promise<void> {
-	await renderSettings();
-	await renderStoredState();
 	await themeController.initialize();
+	await Promise.all([renderSettings(), renderStoredState()]);
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {

@@ -169,10 +169,14 @@ describe('extension-to-web browser handoff', () => {
 	it('publishes the selected theme to the installed extension', () => {
 		const targetWindow = new FakeWindow('?from=extension');
 
-		publishThemeToExtension(targetWindow, 'dark');
+		publishThemeToExtension(targetWindow, 'system', 'dark');
 
 		assert.deepEqual(targetWindow.posted[0], {
-			message: { type: 'bkalendar:web-bridge:theme:save', preference: 'dark' },
+			message: {
+				type: 'bkalendar:web-bridge:theme:save',
+				preference: 'system',
+				resolvedTheme: 'dark'
+			},
 			targetOrigin: 'https://canar1406.github.io'
 		});
 	});

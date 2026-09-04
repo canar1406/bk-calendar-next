@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import {
 	normalizeThemePreference,
+	THEME_RESOLVED_STORAGE_KEY,
 	THEME_STORAGE_KEY,
 	resolveTheme,
 	type ThemePreference
@@ -51,5 +53,44 @@ describe('extension theme preference', () => {
 		await controller.update('system');
 		assert.equal(values[THEME_STORAGE_KEY], 'system');
 		assert.equal(root.dataset.theme, 'light');
+	});
+
+	it('uses the web-synchronized resolved theme when Edge reports the wrong system color', async () => {
+		const values: Record<string, unknown> = {
+			[THEME_STORAGE_KEY]: 'system',
+			[THEME_RESOLVED_STORAGE_KEY]: 'dark'
+		};
+		const root = { dataset: {} as DOMStringMap };
+		const select = { value: '' } as HTMLSelectElement;
+		const controller = createPopupThemeController(
+			root,
+			select,
+			{
+				async get(key) {
+					return { [key]: values[key] };
+				},
+				async set(items) {
+					Object.assign(values, items);
+				}
+			},
+			() => false
+		);
+
+		await controller.initialize();
+		assert.equal(select.value, 'system');
+		assert.equal(root.dataset.theme, 'dark');
+	});
+
+	it('applies the popup theme before waiting for settings and profile state', async () => {
+		const source = await readFile(new URL('../src/popup/main.ts', import.meta.url), 'utf8');
+		const initialize = source.match(
+			/async function initializePopup\(\): Promise<void> \{([\s\S]*?)\n\}/
+		)?.[1];
+
+		assert.ok(initialize);
+		assert.ok(
+			initialize.indexOf('themeController.initialize()') < initialize.indexOf('renderSettings()')
+		);
+		assert.match(initialize, /Promise\.all/);
 	});
 });

@@ -13,6 +13,9 @@ describe('automatic course appearance tracking', () => {
 		assert.match(source, /if \(\(await readTrackingMode\(\)\) !== 'auto-safe'\) return/);
 		assert.match(source, /Object\.keys\(changes\)\.filter\(isCourseAppearanceStorageKey\)/);
 		assert.match(source, /queueCourseAppearanceSync/);
+		assert.match(source, /GoogleCalendarApiError/);
+		assert.match(source, /status === 404/);
+		assert.match(source, /findLegacyCalendars/);
 	});
 
 	it('does not publish appearance again while hydrating extension state in the web app', async () => {

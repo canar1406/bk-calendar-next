@@ -14,12 +14,13 @@
 	onMount(() => {
 		preference = normalizeThemePreference(localStorage.getItem(THEME_STORAGE_KEY));
 		systemQuery = window.matchMedia('(prefers-color-scheme: dark)');
-		applyTheme(document.documentElement, preference, systemQuery.matches);
-		publishThemeToExtension(window, preference);
+		const resolved = applyTheme(document.documentElement, preference, systemQuery.matches);
+		publishThemeToExtension(window, preference, resolved);
 
 		const handleSystemChange = (event: MediaQueryListEvent) => {
 			if (preference === 'system') {
-				applyTheme(document.documentElement, preference, event.matches);
+				const nextResolved = applyTheme(document.documentElement, preference, event.matches);
+				publishThemeToExtension(window, preference, nextResolved);
 			}
 		};
 		const handleExtensionTheme = (event: Event) => {
@@ -38,12 +39,12 @@
 
 	function updatePreference(): void {
 		localStorage.setItem(THEME_STORAGE_KEY, preference);
-		applyTheme(
+		const resolved = applyTheme(
 			document.documentElement,
 			preference,
 			systemQuery?.matches ?? window.matchMedia('(prefers-color-scheme: dark)').matches
 		);
-		publishThemeToExtension(window, preference);
+		publishThemeToExtension(window, preference, resolved);
 	}
 </script>
 

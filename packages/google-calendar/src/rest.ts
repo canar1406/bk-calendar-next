@@ -134,11 +134,17 @@ export async function findLegacyCalendars(
 		showHidden: 'true',
 		maxResults: '250'
 	});
-	const response = await requestJson<{ items?: GoogleCalendarResource[] }>(
-		fetcher,
-		accessToken,
-		`${API_BASE}/users/me/calendarList?${query}`
-	);
+	let response: { items?: GoogleCalendarResource[] };
+	try {
+		response = await requestJson(
+			fetcher,
+			accessToken,
+			`${API_BASE}/users/me/calendarList?${query}`
+		);
+	} catch (error) {
+		if (isInsufficientCalendarListScope(error)) return [];
+		throw error;
+	}
 	return (response.items ?? [])
 		.filter(
 			(calendar) =>

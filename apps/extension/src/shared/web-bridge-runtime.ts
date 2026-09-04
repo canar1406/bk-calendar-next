@@ -12,7 +12,11 @@ export type WebBridgeRuntimeRequest =
 			profileId: string;
 			preferences: CourseColorPreferences;
 	  }
-	| { type: 'bkalendar:web-bridge:theme:save'; preference: ThemePreference };
+	| {
+			type: 'bkalendar:web-bridge:theme:save';
+			preference: ThemePreference;
+			resolvedTheme: 'light' | 'dark';
+	  };
 
 export interface WebBridgeStatePush {
 	type: 'bkalendar:web-bridge:state:push';
@@ -54,7 +58,8 @@ export function isWebBridgeRuntimeRequest(value: unknown): value is WebBridgeRun
 		(message.type === 'bkalendar:web-bridge:theme:save' &&
 			(message.preference === 'light' ||
 				message.preference === 'dark' ||
-				message.preference === 'system'))
+				message.preference === 'system') &&
+			(message.resolvedTheme === 'light' || message.resolvedTheme === 'dark'))
 	);
 }
 

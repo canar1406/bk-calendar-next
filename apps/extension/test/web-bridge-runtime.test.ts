@@ -46,7 +46,11 @@ describe('trusted web bridge runtime', () => {
 	it('stores a web theme choice through the trusted background bridge', async () => {
 		let preference = '';
 		const result = await handleWebBridgeRuntimeRequest(
-			{ type: 'bkalendar:web-bridge:theme:save', preference: 'dark' },
+			{
+				type: 'bkalendar:web-bridge:theme:save',
+				preference: 'system',
+				resolvedTheme: 'dark'
+			},
 			trustedUrl,
 			{
 				async readProfiles() {
@@ -61,14 +65,14 @@ describe('trusted web bridge runtime', () => {
 				async saveAppearance() {
 					throw new Error('not used');
 				},
-				async saveTheme(value) {
-					preference = value;
+				async saveTheme(value, resolvedTheme) {
+					preference = `${value}:${resolvedTheme}`;
 				}
 			}
 		);
 
 		assert.deepEqual(result, { handled: true });
-		assert.equal(preference, 'dark');
+		assert.equal(preference, 'system:dark');
 	});
 
 	it('rejects messages from pages outside the official GitHub Pages path', async () => {

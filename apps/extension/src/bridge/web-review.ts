@@ -42,7 +42,10 @@ interface TransferContext {
 	readExtensionState?(): Promise<ExtensionState>;
 	writeProfile?(profile: SyncProfile): Promise<void>;
 	writeCourseAppearance?(profileId: string, preferences: CourseColorPreferences): Promise<void>;
-	writeTheme?(preference: 'light' | 'dark' | 'system'): Promise<void>;
+	writeTheme?(
+		preference: 'light' | 'dark' | 'system',
+		resolvedTheme: 'light' | 'dark'
+	): Promise<void>;
 	postResponse(response: ExtensionTransferResponse | ExtensionStateReply): void;
 }
 
@@ -69,10 +72,11 @@ export async function handleExtensionTransferMessage(
 		event.data.type === 'bkalendar:web-bridge:theme:save' &&
 		(event.data.preference === 'light' ||
 			event.data.preference === 'dark' ||
-			event.data.preference === 'system')
+			event.data.preference === 'system') &&
+		(event.data.resolvedTheme === 'light' || event.data.resolvedTheme === 'dark')
 	) {
 		if (!context.writeTheme) return false;
-		await context.writeTheme(event.data.preference);
+		await context.writeTheme(event.data.preference, event.data.resolvedTheme);
 		return true;
 	}
 	if (isExtensionStateRequest(event.data)) {
@@ -193,10 +197,11 @@ if (typeof window !== 'undefined' && typeof chrome !== 'undefined') {
 						preferences
 					});
 				},
-				async writeTheme(preference) {
+				async writeTheme(preference, resolvedTheme) {
 					await sendBackgroundRequest({
 						type: 'bkalendar:web-bridge:theme:save',
-						preference
+						preference,
+						resolvedTheme
 					});
 				},
 				postResponse(response) {
