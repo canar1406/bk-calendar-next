@@ -132,7 +132,7 @@ describe('background MyBK CAS client', () => {
 			client.requests.map((request) => request.url),
 			[
 				'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
-				'https://mybk.hcmut.edu.vn/app/login?type=cas',
+				'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas',
 				'https://sso.hcmut.edu.vn/cas/login;jsessionid=abc?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas',
 				'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb'
 			]
@@ -170,7 +170,10 @@ describe('background MyBK CAS client', () => {
 		});
 
 		assert.match(capture.raw, /AS1002/);
-		assert.equal(client.requests[1]?.url, 'https://mybk.hcmut.edu.vn/app/login?type=cas');
+		assert.equal(
+			client.requests[1]?.url,
+			'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas'
+		);
 	});
 
 	it('reports invalid credentials without including the password in the error', async () => {

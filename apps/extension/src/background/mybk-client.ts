@@ -2,7 +2,8 @@ import type { MyBkCredentials } from '../auth/credential-vault.ts';
 import { extractMyBkTableFromDocument, type MyBkCapture } from '../content/extract.ts';
 
 export const MYBK_TIMETABLE_URL = 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb';
-const MYBK_CAS_ENTRY_URL = 'https://mybk.hcmut.edu.vn/app/login?type=cas';
+const MYBK_CAS_ENTRY_URL =
+	'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas';
 
 export interface MyBkHttpResponse {
 	url: string;

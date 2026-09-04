@@ -28,6 +28,7 @@ interface ExtensionManifest {
 
 const manifestPath = new URL('../manifest.json', import.meta.url);
 const myBkAppUrl = 'https://mybk.hcmut.edu.vn/app/*';
+const myBkHttpAppUrl = 'http://mybk.hcmut.edu.vn/app/*';
 const myBkTimetableUrl = 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb*';
 const hcmutSsoUrl = 'https://sso.hcmut.edu.vn/cas/login*';
 const reviewUrl = 'https://canar1406.github.io/bk-calendar-next/*';
@@ -45,6 +46,7 @@ describe('MV3 manifest', () => {
 		assert.deepEqual(manifest.permissions, ['storage', 'alarms', 'notifications', 'identity']);
 		assert.deepEqual(manifest.host_permissions, [
 			myBkAppUrl,
+			myBkHttpAppUrl,
 			hcmutSsoUrl,
 			reviewUrl,
 			googleCalendarApiUrl
