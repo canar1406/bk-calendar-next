@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
 </script>
 
 <svelte:head>
@@ -11,7 +12,10 @@
 </svelte:head>
 
 <main class="legal-page">
-	<a class="legal-back" href={`${base}/`}>← Quay lại BKalendar</a>
+	<div class="legal-toolbar">
+		<a class="legal-back" href={`${base}/`}>← Quay lại BKalendar</a>
+		<ThemeSwitcher />
+	</div>
 	<header>
 		<h1>Chính sách quyền riêng tư</h1>
 		<p>Có hiệu lực từ ngày 03/09/2026.</p>

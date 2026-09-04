@@ -16,6 +16,7 @@
 	} from '../../../../packages/timetable/src/storage.ts';
 	import ChangeSummary from '$lib/components/ChangeSummary.svelte';
 	import ScheduleBoard from '$lib/components/ScheduleBoard.svelte';
+	import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
 	import {
 		requestPendingSnapshotFromExtension,
 		type ExtensionMessageWindow
@@ -199,7 +200,10 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		<span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
 		<span>BKalendar</span>
 	</a>
-	<p>Dữ liệu chỉ được xử lý trên thiết bị của bạn</p>
+	<div class="site-header-actions">
+		<p>Dữ liệu chỉ được xử lý trên thiết bị của bạn</p>
+		<ThemeSwitcher />
+	</div>
 </header>
 
 <main>

@@ -5,8 +5,6 @@
 	import '@fontsource/be-vietnam-pro/700.css';
 	import '@fontsource/ibm-plex-mono/500.css';
 	import '../app.css';
-	import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
 </script>
 
-<ThemeSwitcher />
 <slot />
