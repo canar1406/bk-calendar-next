@@ -10,6 +10,7 @@ describe('course color picker UI', () => {
 		);
 
 		assert.match(source, /Màu môn học/);
+		assert.match(source, /<p class="section-number">03<\/p>/);
 		assert.match(source, /Một màu/);
 		assert.match(source, /Mỗi môn một màu/);
 		assert.match(source, /Ngẫu nhiên/);

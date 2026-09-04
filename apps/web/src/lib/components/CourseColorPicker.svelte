@@ -116,7 +116,7 @@
 <section class="course-appearance" aria-labelledby="course-appearance-title">
 	<div class="appearance-heading">
 		<div>
-			<p class="section-number">MÀU</p>
+			<p class="section-number">03</p>
 			<div>
 				<h2 id="course-appearance-title">Màu môn học</h2>
 				<p>Màu và icon sẽ được giữ ổn định khi BKalendar cập nhật sự kiện.</p>
