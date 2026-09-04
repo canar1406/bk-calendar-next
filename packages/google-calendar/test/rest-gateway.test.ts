@@ -95,6 +95,33 @@ describe('Google Calendar REST payload', () => {
 			{ id: 'managed-calendar-id' }
 		]);
 	});
+
+	it('falls back when the narrow app-created scope cannot list the user calendar list', async () => {
+		const fetcher: typeof fetch = async () =>
+			response(
+				{
+					error: {
+						code: 403,
+						message: 'Request had insufficient authentication scopes.',
+						status: 'PERMISSION_DENIED',
+						details: [{ reason: 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' }]
+					}
+				},
+				403
+			);
+
+		assert.deepEqual(await findManagedCalendars(fetcher, 'token', 'BKalendar • HK 261'), []);
+	});
+
+	it('does not hide unrelated calendar-list failures', async () => {
+		const fetcher: typeof fetch = async () =>
+			response({ error: { code: 403, message: 'Account policy denied access.' } }, 403);
+
+		await assert.rejects(
+			() => findManagedCalendars(fetcher, 'token', 'BKalendar • HK 261'),
+			/Account policy denied access/
+		);
+	});
 });
 
 describe('Google Calendar REST gateway', () => {

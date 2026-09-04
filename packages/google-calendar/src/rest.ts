@@ -81,10 +81,20 @@ export async function findManagedCalendars(
 			maxResults: '250'
 		});
 		if (pageToken) query.set('pageToken', pageToken);
-		const response = await requestJson<{
+		let response: {
 			items?: GoogleCalendarResource[];
 			nextPageToken?: string;
-		}>(fetcher, accessToken, `${API_BASE}/users/me/calendarList?${query}`);
+		};
+		try {
+			response = await requestJson(
+				fetcher,
+				accessToken,
+				`${API_BASE}/users/me/calendarList?${query}`
+			);
+		} catch (error) {
+			if (isInsufficientCalendarListScope(error)) return [];
+			throw error;
+		}
 		for (const calendar of response.items ?? []) {
 			if (
 				!calendar.id ||
@@ -274,10 +284,21 @@ function toHeaderRecord(headers?: HeadersInit): Record<string, string> {
 
 export class GoogleCalendarApiError extends Error {
 	readonly status: number;
+	readonly detail: string;
 
 	constructor(status: number, detail: string) {
 		super(`Google Calendar API ${status}: ${detail}`);
 		this.name = 'GoogleCalendarApiError';
 		this.status = status;
+		this.detail = detail;
 	}
+}
+
+function isInsufficientCalendarListScope(error: unknown): boolean {
+	return (
+		error instanceof GoogleCalendarApiError &&
+		error.status === 403 &&
+		(error.detail.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT') ||
+			error.detail.includes('insufficient authentication scopes'))
+	);
 }
