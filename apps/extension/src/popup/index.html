@@ -7,22 +7,24 @@
 	</head>
 	<body>
 		<main>
-			<header class="brand">
-				<span class="brand-mark" aria-hidden="true">BK</span>
-				<div>
-					<p class="eyebrow">BKalendar Next</p>
-					<h1>Xem lại thay đổi</h1>
-				</div>
-			</header>
+			<div class="popup-header">
+				<header class="brand">
+					<span class="brand-mark" aria-hidden="true">BK</span>
+					<div>
+						<p class="eyebrow">BKalendar</p>
+						<h1>Xem lại thay đổi</h1>
+					</div>
+				</header>
 
-			<label class="theme-control" for="theme-preference">
-				<span>Giao diện</span>
-				<select id="theme-preference">
-					<option value="system">Theo hệ thống</option>
-					<option value="light">Sáng</option>
-					<option value="dark">Tối</option>
-				</select>
-			</label>
+				<label class="theme-control" for="theme-preference">
+					<span>Giao diện</span>
+					<select id="theme-preference" aria-label="Giao diện">
+						<option value="system">Hệ thống</option>
+						<option value="light">Sáng</option>
+						<option value="dark">Tối</option>
+					</select>
+				</label>
+			</div>
 
 			<section class="status-card" aria-live="polite" aria-atomic="true">
 				<span id="status-dot" class="status-dot" aria-hidden="true"></span>
@@ -73,89 +75,100 @@
 				</div>
 			</aside>
 
-			<section class="settings-card" aria-labelledby="settings-title">
-				<div class="section-heading">
-					<h2 id="settings-title">Theo dõi MyBK</h2>
-					<span id="credential-state" class="local-badge">Chưa cấu hình</span>
-				</div>
+			<details id="settings-disclosure" class="settings-disclosure">
+				<summary>
+					<span>
+						<strong>Thiết lập tự động</strong>
+						<small>MyBK · Google Calendar</small>
+					</span>
+					<span class="summary-chevron" aria-hidden="true"></span>
+				</summary>
 
-				<label class="field" for="tracking-mode">
-					<span>Chế độ cập nhật</span>
-					<select id="tracking-mode">
-						<option value="off">Tắt theo dõi</option>
-						<option value="review" selected>Phát hiện và hỏi trước</option>
-						<option value="auto-safe">Tự động cập nhật và báo sau</option>
-					</select>
-				</label>
-
-				<div class="google-connection">
-					<div>
-						<strong>Google Calendar</strong>
-						<span id="google-state">Chưa kết nối</span>
+				<section class="settings-card" aria-labelledby="settings-title">
+					<div class="section-heading">
+						<h2 id="settings-title">Theo dõi MyBK</h2>
+						<span id="credential-state" class="local-badge">Chưa cấu hình</span>
 					</div>
-					<div class="google-actions">
-						<button id="connect-google" type="button">Kết nối</button>
-						<button id="disconnect-google" type="button">Ngắt</button>
+
+					<label class="field" for="tracking-mode">
+						<span>Chế độ cập nhật</span>
+						<select id="tracking-mode">
+							<option value="off">Tắt theo dõi</option>
+							<option value="review" selected>Phát hiện và hỏi trước</option>
+							<option value="auto-safe">Tự động cập nhật và báo sau</option>
+						</select>
+					</label>
+
+					<div class="google-connection">
+						<div>
+							<strong>Google Calendar</strong>
+							<span id="google-state">Chưa kết nối</span>
+						</div>
+						<div class="google-actions">
+							<button id="connect-google" type="button">Kết nối</button>
+							<button id="disconnect-google" type="button">Ngắt</button>
+						</div>
 					</div>
-				</div>
 
-				<form id="credential-form" class="credential-form">
-					<label class="field" for="mybk-username">
-						<span>Tài khoản HCMUT</span>
-						<input
-							id="mybk-username"
-							name="username"
-							type="text"
-							autocomplete="username"
-							required
-						/>
-					</label>
-					<label class="field" for="mybk-password">
-						<span>Mật khẩu MyBK</span>
-						<input
-							id="mybk-password"
-							name="password"
-							type="password"
-							autocomplete="current-password"
-							required
-						/>
-					</label>
-					<label class="consent" for="credential-consent">
-						<input id="credential-consent" type="checkbox" required />
-						<span>
-							Cho phép mã hóa và lưu thông tin đăng nhập trên thiết bị để kiểm tra MyBK trong nền.
-						</span>
-					</label>
-					<p id="credential-message" class="credential-message" role="status"></p>
-					<div class="settings-actions">
-						<button id="save-credentials" type="submit">Lưu và kiểm tra ngay</button>
-						<button id="remove-credentials" type="button">Xóa đăng nhập</button>
-					</div>
-				</form>
-			</section>
+					<form id="credential-form" class="credential-form">
+						<label class="field" for="mybk-username">
+							<span>Tài khoản HCMUT</span>
+							<input
+								id="mybk-username"
+								name="username"
+								type="text"
+								autocomplete="username"
+								required
+							/>
+						</label>
+						<label class="field" for="mybk-password">
+							<span>Mật khẩu MyBK</span>
+							<input
+								id="mybk-password"
+								name="password"
+								type="password"
+								autocomplete="current-password"
+								required
+							/>
+						</label>
+						<label class="consent" for="credential-consent">
+							<input id="credential-consent" type="checkbox" required />
+							<span>
+								Cho phép mã hóa và lưu thông tin đăng nhập trên thiết bị để kiểm tra MyBK trong nền.
+							</span>
+						</label>
+						<p id="credential-message" class="credential-message" role="status"></p>
+						<div class="settings-actions">
+							<button id="save-credentials" type="submit">Lưu và kiểm tra ngay</button>
+							<button id="remove-credentials" type="button">Xóa đăng nhập</button>
+						</div>
+					</form>
+				</section>
+			</details>
 
-			<a
-				id="primary-action"
-				class="primary-action"
-				href="https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb"
-				target="_blank"
-				rel="noreferrer"
-			>
-				Mở thời khóa biểu MyBK
-			</a>
+			<div class="popup-actions">
+				<a
+					id="primary-action"
+					class="primary-action"
+					href="https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb"
+					target="_blank"
+					rel="noreferrer"
+				>
+					Mở thời khóa biểu MyBK
+				</a>
 
-			<a
-				class="secondary-action"
-				href="https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb"
-				target="_blank"
-				rel="noreferrer"
-			>
-				Mở MyBK
-			</a>
+				<a
+					class="secondary-action"
+					href="https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb"
+					target="_blank"
+					rel="noreferrer"
+				>
+					Mở MyBK
+				</a>
+			</div>
 
 			<p class="privacy-note">
-				Mật khẩu được mã hóa cục bộ và không đồng bộ cloud. BKalendar chỉ tự thêm/sửa trong lịch do
-				BKalendar tạo; chỉ tự xóa event BKalendar khi MyBK trả về đầy đủ dữ liệu.
+				Mã hóa cục bộ · Không có máy chủ BKalendar · Chỉ sửa lịch do BKalendar tạo
 			</p>
 		</main>
 		<script type="module" src="./main.ts"></script>

@@ -36,6 +36,7 @@ const googleState = requireElement<HTMLElement>('google-state');
 const connectGoogle = requireElement<HTMLButtonElement>('connect-google');
 const disconnectGoogle = requireElement<HTMLButtonElement>('disconnect-google');
 const themePreference = requireElement<HTMLSelectElement>('theme-preference');
+const settingsDisclosure = requireElement<HTMLDetailsElement>('settings-disclosure');
 const PROFILE_STORAGE_KEY = 'bkalendar-next:profiles';
 const themeController = createPopupThemeController(
 	document.documentElement,
@@ -142,6 +143,7 @@ async function renderSettings(): Promise<void> {
 	credentialState.textContent = response.configured ? 'Đã lưu an toàn' : 'Chưa cấu hình';
 	credentialState.dataset.configured = String(response.configured);
 	removeCredentials.disabled = !response.configured;
+	settingsDisclosure.open = response.configured !== true;
 	renderGoogleConnection(response.googleConnected === true);
 }
 
