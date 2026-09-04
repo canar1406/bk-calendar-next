@@ -97,8 +97,8 @@ function parseCasLoginForm(response: MyBkHttpResponse): {
 	action: string;
 	hiddenFields: Record<string, string>;
 } {
-	const formMatch = response.body.match(
-		/<form\b[^>]*\bid=["']fm1["'][^>]*\baction=["']([^"']+)["'][^>]*>([\s\S]*?)<\/form>/iu
+	const formMatch = [...response.body.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/giu)].find(
+		(match) => looksLikeCasForm(match[2] ?? '')
 	);
 	if (!formMatch || (!isCasLogin(response) && !looksLikeCasForm(formMatch[2] ?? ''))) {
 		throw new Error('MyBK không chuyển đến trang đăng nhập HCMUT CAS.');
@@ -111,7 +111,8 @@ function parseCasLoginForm(response: MyBkHttpResponse): {
 		if (!name) continue;
 		hiddenFields[name] = attribute(attributes, 'value') ?? '';
 	}
-	const actionUrl = new URL(decodeHtml(formMatch[1] ?? ''), response.url);
+	const action = attribute(formMatch[1] ?? '', 'action') ?? '/cas/login';
+	const actionUrl = new URL(decodeHtml(action), response.url);
 	if (actionUrl.hostname !== 'sso.hcmut.edu.vn') {
 		if (actionUrl.pathname.startsWith('/cas/login') && looksLikeCasForm(formMatch[2] ?? '')) {
 			actionUrl.protocol = 'https:';
