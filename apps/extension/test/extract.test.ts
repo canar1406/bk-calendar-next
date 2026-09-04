@@ -27,6 +27,17 @@ describe('MyBK DOM extractor', () => {
 		assert.deepEqual(result.completeness, { state: 'incomplete', parsedRows: 2, expectedRows: 11 });
 	});
 
+	it('recognizes live DataTables headers that include sorting controls', () => {
+		const decorated = html.replaceAll(
+			'</th>',
+			'<span class="sorting-control" aria-hidden="true">⇅</span></th>'
+		);
+		const result = extractMyBkTableFromDocument(decorated);
+
+		assert.match(result.raw, /20261\tMT1003\tGiải tích 1/);
+		assert.equal(result.completeness.parsedRows, 2);
+	});
+
 	it('throws when the timetable table is absent instead of accepting an empty schedule', () => {
 		assert.throws(
 			() => extractMyBkTableFromDocument('<p>Phiên đăng nhập đã hết hạn</p>'),

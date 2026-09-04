@@ -33,9 +33,10 @@ export function extractMyBkTableFromDocument(source: Document | string): MyBkCap
 		const rows = parseRows(table[1] ?? '');
 		if (rows.length < 2) continue;
 		const headers = rows[0]?.map(normalize) ?? [];
-		if (!EXPECTED_HEADERS.every((header) => headers.includes(header))) continue;
-
-		const headerIndexes = EXPECTED_HEADERS.map((header) => headers.indexOf(header));
+		const headerIndexes = EXPECTED_HEADERS.map((header) =>
+			headers.findIndex((value) => matchesHeader(value, header))
+		);
+		if (headerIndexes.some((index) => index < 0)) continue;
 		const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell.trim() !== ''));
 		const canonicalHeader = EXPECTED_HEADERS.map(toDisplayHeader);
 		const canonicalRows = dataRows.map((row) => headerIndexes.map((index) => row[index] ?? ''));
@@ -104,6 +105,10 @@ function decodeHtml(value: string): string {
 
 function normalize(value: string): string {
 	return value.normalize('NFC').toLocaleLowerCase('vi').replace(/\s+/g, ' ').trim();
+}
+
+function matchesHeader(value: string, expected: string): boolean {
+	return value === expected || value.startsWith(`${expected} `) || value.startsWith(`${expected}⇅`);
 }
 
 function toDisplayHeader(header: string): string {

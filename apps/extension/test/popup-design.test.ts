@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 
 const htmlPath = new URL('../src/popup/index.html', import.meta.url);
 const cssPath = new URL('../src/popup/style.css', import.meta.url);
+const mainPath = new URL('../src/popup/main.ts', import.meta.url);
 
 describe('extension popup visual structure', () => {
 	it('uses a compact topbar and a collapsible automation settings section', async () => {
@@ -26,5 +27,17 @@ describe('extension popup visual structure', () => {
 			/:root\[data-theme='dark'\]\s+\.diff-details li\[data-kind='added'\][\s\S]*background:/
 		);
 		assert.match(css, /:root\[data-theme='dark'\]\s+\.local-badge[\s\S]*background:/);
+	});
+
+	it('retries MyBK in the background instead of opening a visible MyBK tab', async () => {
+		const [html, main] = await Promise.all([
+			readFile(htmlPath, 'utf8'),
+			readFile(mainPath, 'utf8')
+		]);
+
+		assert.match(html, /<button[^>]*id="primary-action"/);
+		assert.equal(/href="https:\/\/mybk\.hcmut\.edu\.vn/.test(html), false);
+		assert.equal(/Mở MyBK/.test(html), false);
+		assert.match(main, /bkalendar:tracking:run-now/);
 	});
 });

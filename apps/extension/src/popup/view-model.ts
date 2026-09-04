@@ -28,10 +28,10 @@ export interface PopupViewModel {
 	deletionBlocked: boolean;
 	warning?: string;
 	actionLabel: string;
-	actionUrl: string;
+	actionKind: 'background-check' | 'open-web-review' | 'show-diff';
+	actionUrl?: string;
 }
 
-export const MYBK_TIMETABLE_URL = 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb';
 export const WEB_REVIEW_URL = 'https://canar1406.github.io/bk-calendar-next/?from=extension';
 
 export function selectCurrentProfile(
@@ -53,8 +53,8 @@ export function buildPopupViewModel(
 			detail: 'Mở trang thời khóa biểu MyBK để tiện ích đọc và lưu bản xem trước cục bộ.',
 			counts: emptyCounts,
 			deletionBlocked: false,
-			actionLabel: 'Mở thời khóa biểu MyBK',
-			actionUrl: MYBK_TIMETABLE_URL
+			actionLabel: 'Kiểm tra MyBK trong nền',
+			actionKind: 'background-check'
 		};
 	}
 
@@ -66,8 +66,8 @@ export function buildPopupViewModel(
 			capturedLabel: formatDateTime(status.checkedAt),
 			counts: emptyCounts,
 			deletionBlocked: false,
-			actionLabel: 'Mở MyBK để thử lại',
-			actionUrl: MYBK_TIMETABLE_URL
+			actionLabel: 'Thử lại trong nền',
+			actionKind: 'background-check'
 		};
 	}
 
@@ -113,7 +113,8 @@ export function buildPopupViewModel(
 		deletionBlocked,
 		...(warning ? { warning } : {}),
 		actionLabel: alreadyApplied ? 'Xem diff chi tiết' : 'Xem lại trên BKalendar',
-		actionUrl: alreadyApplied ? '#diff-details' : WEB_REVIEW_URL
+		actionKind: alreadyApplied ? 'show-diff' : 'open-web-review',
+		...(alreadyApplied ? {} : { actionUrl: WEB_REVIEW_URL })
 	};
 }
 

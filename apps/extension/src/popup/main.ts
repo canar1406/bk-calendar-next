@@ -23,7 +23,7 @@ const warning = requireElement<HTMLElement>('deletion-warning');
 const warningText = requireElement<HTMLParagraphElement>('deletion-warning-text');
 const diffDetails = requireElement<HTMLElement>('diff-details');
 const diffList = requireElement<HTMLUListElement>('diff-list');
-const primaryAction = requireElement<HTMLAnchorElement>('primary-action');
+const primaryAction = requireElement<HTMLButtonElement>('primary-action');
 const credentialForm = requireElement<HTMLFormElement>('credential-form');
 const usernameInput = requireElement<HTMLInputElement>('mybk-username');
 const passwordInput = requireElement<HTMLInputElement>('mybk-password');
@@ -43,6 +43,8 @@ const themeController = createPopupThemeController(
 	themePreference,
 	chrome.storage.local
 );
+let primaryActionKind: 'background-check' | 'open-web-review' | 'show-diff' = 'background-check';
+let primaryActionUrl = '';
 
 void renderStoredState();
 void renderSettings();
@@ -82,6 +84,10 @@ themePreference.addEventListener('change', () => {
 	);
 });
 
+primaryAction.addEventListener('click', () => {
+	void handlePrimaryAction();
+});
+
 async function renderStoredState(): Promise<void> {
 	const stored = await chrome.storage.local.get([
 		EXTENSION_STATUS_KEY,
@@ -113,7 +119,8 @@ async function renderStoredState(): Promise<void> {
 	warning.hidden = viewModel.warning === undefined;
 	warningText.textContent = viewModel.warning ?? '';
 	primaryAction.textContent = viewModel.actionLabel;
-	primaryAction.href = viewModel.actionUrl;
+	primaryActionKind = viewModel.actionKind;
+	primaryActionUrl = viewModel.actionUrl ?? '';
 	diffDetails.hidden = details.length === 0;
 	diffList.replaceChildren(
 		...details.map((detail) => {
@@ -132,6 +139,33 @@ async function renderStoredState(): Promise<void> {
 		location.hash === '#diff-details'
 	) {
 		requestAnimationFrame(() => diffDetails.scrollIntoView({ block: 'start' }));
+	}
+}
+
+async function handlePrimaryAction(): Promise<void> {
+	if (primaryActionKind === 'show-diff') {
+		diffDetails.scrollIntoView({ block: 'start', behavior: 'smooth' });
+		return;
+	}
+	if (primaryActionKind === 'open-web-review') {
+		if (primaryActionUrl) await chrome.tabs.create({ url: primaryActionUrl });
+		return;
+	}
+
+	primaryAction.disabled = true;
+	statusTitle.textContent = 'Đang kiểm tra MyBK trong nền…';
+	statusDetail.textContent = 'Không mở tab mới. Tiện ích đang đăng nhập và đọc thời khóa biểu.';
+	try {
+		await sendRuntimeMessage({ type: 'bkalendar:tracking:run-now' });
+	} catch (error) {
+		settingsDisclosure.open = true;
+		setCredentialMessage(
+			error instanceof Error ? error.message : 'Không thể kiểm tra MyBK trong nền.',
+			'error'
+		);
+	} finally {
+		primaryAction.disabled = false;
+		await renderStoredState();
 	}
 }
 

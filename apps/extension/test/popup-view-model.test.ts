@@ -221,11 +221,9 @@ describe('extension popup view model', () => {
 		assert.equal(viewModel.title, 'Chưa có dữ liệu để xem');
 		assert.deepEqual(viewModel.counts, { added: 0, changed: 0, removed: 0 });
 		assert.equal(viewModel.deletionBlocked, false);
-		assert.equal(viewModel.actionLabel, 'Mở thời khóa biểu MyBK');
-		assert.equal(
-			viewModel.actionUrl,
-			'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb'
-		);
+		assert.equal(viewModel.actionLabel, 'Kiểm tra MyBK trong nền');
+		assert.equal(viewModel.actionKind, 'background-check');
+		assert.equal(viewModel.actionUrl, undefined);
 	});
 
 	it('keeps extraction errors local and offers only a retry action', () => {
@@ -238,10 +236,8 @@ describe('extension popup view model', () => {
 		assert.equal(viewModel.tone, 'error');
 		assert.equal(viewModel.title, 'Chưa đọc được lịch');
 		assert.equal(viewModel.detail, 'Không đọc được thời khóa biểu.');
-		assert.equal(viewModel.actionLabel, 'Mở MyBK để thử lại');
-		assert.equal(
-			viewModel.actionUrl,
-			'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb'
-		);
+		assert.equal(viewModel.actionLabel, 'Thử lại trong nền');
+		assert.equal(viewModel.actionKind, 'background-check');
+		assert.equal(viewModel.actionUrl, undefined);
 	});
 });
