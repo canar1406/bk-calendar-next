@@ -90,6 +90,42 @@ describe('managed Google Calendar reconciliation', () => {
 		assert.equal(result.unchanged, 1);
 	});
 
+	it('patches a changed course presentation even when the timetable source is unchanged', async () => {
+		let patched: ManagedEvent | undefined;
+		const { api } = gateway([
+			remote('event-1', 'MT1003', 'same:color:2:icon:📘', {
+				sourceFingerprint: 'same',
+				colorId: '2',
+				icon: '📘'
+			})
+		]);
+		api.patchEvent = async (_calendarId, _eventId, event) => {
+			patched = event;
+			return remote('event-1', event.stableKey, event.fingerprint ?? '');
+		};
+
+		const result = await syncManagedCalendar(
+			api,
+			'calendar-1',
+			[
+				{
+					...local('MT1003', 'same'),
+					colorId: '5',
+					icon: '🧮',
+					sourceFingerprint: 'same',
+					fingerprint: 'same:color:5:icon:🧮'
+				}
+			],
+			{ allowDeletes: false }
+		);
+
+		assert.equal(result.patched, 1);
+		assert.equal(patched?.colorId, '5');
+		assert.equal(patched?.icon, '🧮');
+		assert.equal(patched?.sourceFingerprint, 'same');
+		assert.equal(patched?.fingerprint, 'same:color:5:icon:🧮');
+	});
+
 	it('inherits course presentation when patching a changed MyBK source', async () => {
 		let patched: ManagedEvent | undefined;
 		const { api } = gateway([

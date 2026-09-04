@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
 	decideTrackingAction,
 	requiresGoogleConnection,
+	shouldRunAutomaticSync,
 	type TrackingMode
 } from '../src/background/tracking-policy.ts';
 
@@ -29,6 +30,12 @@ describe('background timetable tracking policy', () => {
 		assert.equal(requiresGoogleConnection('auto-safe'), true);
 		assert.equal(requiresGoogleConnection('review'), false);
 		assert.equal(requiresGoogleConnection('off'), false);
+	});
+
+	it('keeps the automatic sync path alive for presentation-only changes', () => {
+		assert.equal(shouldRunAutomaticSync('auto-safe'), true);
+		assert.equal(shouldRunAutomaticSync('review'), false);
+		assert.equal(shouldRunAutomaticSync('off'), false);
 	});
 
 	it('stages and reports the full diff in review mode without writing Google', () => {

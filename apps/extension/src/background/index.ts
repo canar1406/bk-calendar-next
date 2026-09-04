@@ -13,6 +13,7 @@ import {
 	decideTrackingAction,
 	isTrackingMode,
 	requiresGoogleConnection,
+	shouldRunAutomaticSync,
 	type ChangeSummary,
 	type TrackingMode
 } from './tracking-policy.ts';
@@ -108,8 +109,9 @@ chrome.notifications.onClicked.addListener((notificationId) => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-	if (areaName !== 'local' || !hasWebStateChange(changes)) return;
-	void broadcastWebState();
+	if (areaName !== 'local') return;
+	if (hasWebStateChange(changes)) void broadcastWebState();
+	if (hasAppearanceChange(changes)) void runAutomaticPresentationCheck();
 });
 
 void hardenLocalStorage();
@@ -178,6 +180,15 @@ function hasWebStateChange(changes: Record<string, chrome.storage.StorageChange>
 		changes[EXTENSION_STATUS_KEY] !== undefined ||
 		Object.keys(changes).some((key) => key.startsWith('bkalendar-next:course-colors:'))
 	);
+}
+
+function hasAppearanceChange(changes: Record<string, chrome.storage.StorageChange>): boolean {
+	return Object.keys(changes).some((key) => key.startsWith('bkalendar-next:course-colors:'));
+}
+
+async function runAutomaticPresentationCheck(): Promise<void> {
+	if ((await readTrackingMode()) !== 'auto-safe') return;
+	await runBackgroundTracking();
 }
 
 async function broadcastWebState(): Promise<void> {
@@ -361,7 +372,8 @@ async function processCapture(
 ): Promise<void> {
 	const { changes, staged, store } = await stageCapture(capture);
 	const action = decideTrackingAction(mode, changes);
-	if (!action.shouldNotify) return;
+	const shouldAutomaticallySync = shouldRunAutomaticSync(mode);
+	if (!action.shouldNotify && !shouldAutomaticallySync) return;
 
 	if (mode === 'auto-safe' && changes.removed > 0 && !changes.canDelete) {
 		await persistDiffLog(
@@ -374,7 +386,7 @@ async function processCapture(
 		return;
 	}
 
-	if (!action.shouldApplyUpserts && !action.shouldApplyRemovals) {
+	if (!action.shouldApplyUpserts && !action.shouldApplyRemovals && !shouldAutomaticallySync) {
 		await persistDiffLog(
 			createDiffLog(staged.profileId, 'review', staged.diff, new Date().toISOString())
 		);
@@ -404,7 +416,20 @@ async function processCapture(
 	await persistDiffLog(
 		createDiffLog(staged.profileId, 'applied', synced.diff, new Date().toISOString())
 	);
-	await persistStatus(createCaptureStatus(capture, new Date().toISOString(), changes, 'applied'));
+	await persistStatus(
+		createCaptureStatus(
+			capture,
+			new Date().toISOString(),
+			{
+				added: synced.result.inserted,
+				changed: synced.result.patched,
+				removed: synced.result.deleted,
+				unchanged: synced.result.unchanged,
+				canDelete: changes.canDelete
+			},
+			'applied'
+		)
+	);
 	await notifyChanges(
 		'applied',
 		{

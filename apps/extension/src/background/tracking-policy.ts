@@ -44,3 +44,7 @@ export function isTrackingMode(value: unknown): value is TrackingMode {
 export function requiresGoogleConnection(mode: TrackingMode): boolean {
 	return mode === 'auto-safe';
 }
+
+export function shouldRunAutomaticSync(mode: TrackingMode): boolean {
+	return mode === 'auto-safe';
+}
