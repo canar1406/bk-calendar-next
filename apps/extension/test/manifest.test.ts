@@ -43,7 +43,13 @@ describe('MV3 manifest', () => {
 		const manifest = await readManifest();
 
 		assert.equal(manifest.manifest_version, 3);
-		assert.deepEqual(manifest.permissions, ['storage', 'alarms', 'notifications', 'identity']);
+		assert.deepEqual(manifest.permissions, [
+			'storage',
+			'alarms',
+			'notifications',
+			'identity',
+			'scripting'
+		]);
 		assert.deepEqual(manifest.host_permissions, [
 			myBkAppUrl,
 			myBkHttpAppUrl,

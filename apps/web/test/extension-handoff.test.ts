@@ -3,11 +3,16 @@ import { describe, it } from 'node:test';
 import {
 	createExtensionTransferEmptyResponse,
 	createExtensionTransferResponse,
+	createExtensionStateResponse,
+	createExtensionStateUpdate,
 	createSnapshot
 } from '../../../packages/timetable/src/index.ts';
 import {
 	publishCourseAppearanceToExtension,
+	publishProfileToExtension,
+	requestExtensionStateFromExtension,
 	requestPendingSnapshotFromExtension,
+	subscribeToExtensionState,
 	type ExtensionMessageEvent,
 	type ExtensionMessageWindow,
 	type ExtensionTransferTimers
@@ -85,6 +90,53 @@ class FakeTimers implements ExtensionTransferTimers {
 }
 
 describe('extension-to-web browser handoff', () => {
+	it('requests the complete local extension state without requiring an extension URL flag', async () => {
+		const targetWindow = new FakeWindow('?semester=261');
+		const timers = new FakeTimers();
+		const state = extensionState();
+
+		const pending = requestExtensionStateFromExtension({
+			targetWindow,
+			timers,
+			requestId: 'state-request',
+			retryIntervalMs: 10,
+			timeoutMs: 30
+		});
+
+		assert.deepEqual(targetWindow.posted[0], {
+			message: {
+				source: 'bkalendar-web',
+				type: 'bkalendar:request-state',
+				version: 1,
+				requestId: 'state-request'
+			},
+			targetOrigin: 'https://canar1406.github.io'
+		});
+		targetWindow.emit(createExtensionStateResponse('state-request', state));
+
+		assert.deepEqual(await pending, { status: 'ready', state });
+		assert.equal(targetWindow.listenerCount, 0);
+		assert.equal(timers.pendingCount, 0);
+	});
+
+	it('subscribes to same-window extension state updates and ignores untrusted events', () => {
+		const targetWindow = new FakeWindow();
+		const received: string[] = [];
+		const unsubscribe = subscribeToExtensionState(targetWindow, (state) => {
+			received.push(state.updatedAt);
+		});
+		const state = extensionState();
+
+		targetWindow.emit(createExtensionStateUpdate(state), { origin: 'https://evil.example' });
+		targetWindow.emit(createExtensionStateUpdate(state), { source: {} });
+		targetWindow.emit(createExtensionStateUpdate(state));
+		assert.deepEqual(received, [state.updatedAt]);
+
+		unsubscribe();
+		targetWindow.emit(createExtensionStateUpdate({ ...state, updatedAt: 'later' }));
+		assert.deepEqual(received, [state.updatedAt]);
+	});
+
 	it('publishes profile-specific course appearance settings to the installed extension', () => {
 		const targetWindow = new FakeWindow('?semester=261');
 		const preferences = {
@@ -111,6 +163,38 @@ describe('extension-to-web browser handoff', () => {
 				targetOrigin: 'https://canar1406.github.io'
 			}
 		]);
+	});
+
+	it('publishes a profile snapshot to the installed extension without token fields', () => {
+		const targetWindow = new FakeWindow('?semester=261');
+		publishProfileToExtension({
+			targetWindow,
+			profile: {
+				schemaVersion: 1,
+				profileId: 'student-2024:261',
+				sourceKind: 'student-2024',
+				semester: 261,
+				calendarName: 'BKalendar • HK 261',
+				lastCheckedAt: '2026-09-04T16:00:00.000Z'
+			}
+		});
+
+		assert.deepEqual(targetWindow.posted[0], {
+			message: {
+				source: 'bkalendar-web',
+				type: 'bkalendar:sync-profile',
+				version: 1,
+				profile: {
+					schemaVersion: 1,
+					profileId: 'student-2024:261',
+					sourceKind: 'student-2024',
+					semester: 261,
+					calendarName: 'BKalendar • HK 261',
+					lastCheckedAt: '2026-09-04T16:00:00.000Z'
+				}
+			},
+			targetOrigin: 'https://canar1406.github.io'
+		});
 	});
 
 	it('does nothing unless the URL explicitly comes from the extension', async () => {
@@ -234,3 +318,22 @@ describe('extension-to-web browser handoff', () => {
 		assert.equal(timers.pendingCount, 0);
 	});
 });
+
+function extensionState() {
+	return {
+		schemaVersion: 1 as const,
+		updatedAt: '2026-09-04T16:00:00.000Z',
+		profiles: [
+			{
+				schemaVersion: 1 as const,
+				profileId: 'student-2024:261',
+				sourceKind: 'student-2024' as const,
+				semester: 261,
+				calendarName: 'BKalendar • HK 261',
+				lastCheckedAt: '2026-09-04T16:00:00.000Z'
+			}
+		],
+		appearances: {},
+		status: { state: 'idle' as const }
+	};
+}

@@ -22,6 +22,17 @@ export interface CourseColorPalette {
 	colorIds: string[];
 }
 
+export interface CourseAppearanceSummary {
+	course: string;
+	courseCode: string;
+	title: string;
+	colorId: string;
+	colorName: string;
+	background: string;
+	foreground: string;
+	icon: string;
+}
+
 export interface CourseColorPreferences {
 	schemaVersion: 1;
 	mode: CourseColorMode;
@@ -371,6 +382,34 @@ export function buildCourseColorAssignments(
 			return [course, validColorId(override) ? override : generated];
 		})
 	);
+}
+
+export function summarizeCourseAppearances(
+	events: ManagedEvent[],
+	preferences: CourseColorPreferences
+): CourseAppearanceSummary[] {
+	const assignments = buildCourseColorAssignments(events, preferences);
+	const courses = new Map<string, ManagedEvent>();
+	for (const event of events) {
+		const course = courseIdentity(event);
+		if (!courses.has(course)) courses.set(course, event);
+	}
+	return [...courses.entries()]
+		.sort(([left], [right]) => left.localeCompare(right, 'vi'))
+		.map(([course, event]) => {
+			const color = colorForId(assignments[course] ?? '7');
+			const icon = validIcon(preferences.icons[course]) ? preferences.icons[course]! : '';
+			return {
+				course,
+				courseCode: event.courseCode,
+				title: event.title,
+				colorId: color.id,
+				colorName: color.name,
+				background: color.background,
+				foreground: color.foreground,
+				icon
+			};
+		});
 }
 
 export function randomizeCourseColors(

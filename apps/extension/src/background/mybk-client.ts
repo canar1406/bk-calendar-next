@@ -3,7 +3,7 @@ import { extractMyBkTableFromDocument, type MyBkCapture } from '../content/extra
 
 export const MYBK_TIMETABLE_URL = 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb';
 const MYBK_CAS_ENTRY_URL =
-	'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas';
+	'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas&renew=true';
 
 export interface MyBkHttpResponse {
 	url: string;
@@ -54,11 +54,22 @@ export async function fetchMyBkTimetable(
 	}
 	const existingCapture = initial ? tryExtract(initial.body) : undefined;
 	if (existingCapture) return existingCapture;
+	if (initial && isMyBkAppHome(initial)) {
+		const capture = await readTimetable(client);
+		if (capture) return capture;
+	}
 
 	const casPage =
 		initial && isCasLogin(initial)
 			? initial
 			: await client.request(MYBK_CAS_ENTRY_URL, { method: 'GET' });
+	const sessionCapture = tryExtract(casPage.body);
+	if (sessionCapture) return sessionCapture;
+	if (isMyBkAppHome(casPage)) {
+		const capture = await readTimetable(client);
+		if (capture) return capture;
+		throw new Error('MyBK đã đăng nhập nhưng chưa tải được thời khóa biểu.');
+	}
 	const form = parseCasLoginForm(casPage);
 	const body = new URLSearchParams({
 		...form.hiddenFields,
@@ -85,6 +96,11 @@ export async function fetchMyBkTimetable(
 	throw new Error('MyBK đã đăng nhập nhưng chưa trả về bảng thời khóa biểu.');
 }
 
+async function readTimetable(client: MyBkHttpClient): Promise<MyBkCapture | undefined> {
+	const response = await client.request(MYBK_TIMETABLE_URL, { method: 'GET' });
+	return tryExtract(response.body);
+}
+
 function tryExtract(html: string): MyBkCapture | undefined {
 	try {
 		return extractMyBkTableFromDocument(html);
@@ -98,10 +114,17 @@ function parseCasLoginForm(response: MyBkHttpResponse): {
 	hiddenFields: Record<string, string>;
 } {
 	const formMatch = [...response.body.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/giu)].find(
-		(match) => looksLikeCasForm(match[2] ?? '')
+		(match) => {
+			const action = attribute(match[1] ?? '', 'action') ?? '';
+			return (
+				looksLikeCasForm(match[2] ?? '') || /cas\/login/iu.test(action) || isCasLogin(response)
+			);
+		}
 	);
-	if (!formMatch || (!isCasLogin(response) && !looksLikeCasForm(formMatch[2] ?? ''))) {
-		throw new Error('MyBK không chuyển đến trang đăng nhập HCMUT CAS.');
+	if (!formMatch) {
+		throw new Error(
+			`MyBK không chuyển đến trang đăng nhập HCMUT CAS. ${loginDiagnostics(response)}`
+		);
 	}
 	const hiddenFields: Record<string, string> = {};
 	for (const input of (formMatch[2] ?? '').matchAll(/<input\b([^>]+)>/giu)) {
@@ -125,6 +148,20 @@ function parseCasLoginForm(response: MyBkHttpResponse): {
 		action: actionUrl.href,
 		hiddenFields
 	};
+}
+
+function loginDiagnostics(response: MyBkHttpResponse): string {
+	try {
+		const url = new URL(response.url);
+		const forms = [...response.body.matchAll(/<form\b([^>]*)>/giu)];
+		const hasCasAction = forms.some((match) =>
+			/cas\/login/iu.test(attribute(match[1] ?? '', 'action') ?? '')
+		);
+		const hasPassword = /\bname\s*=\s*["']password["']/iu.test(response.body);
+		return `(URL ${url.hostname}${url.pathname}; forms=${forms.length}; casAction=${hasCasAction}; passwordField=${hasPassword})`;
+	} catch {
+		return '(URL phản hồi không hợp lệ)';
+	}
 }
 
 function looksLikeCasForm(html: string): boolean {
@@ -158,6 +195,17 @@ function isMyBkLogin(response: MyBkHttpResponse): boolean {
 	try {
 		const url = new URL(response.url);
 		return url.hostname === 'mybk.hcmut.edu.vn' && url.pathname.startsWith('/app/login');
+	} catch {
+		return false;
+	}
+}
+
+function isMyBkAppHome(response: MyBkHttpResponse): boolean {
+	try {
+		const url = new URL(response.url);
+		return (
+			url.hostname === 'mybk.hcmut.edu.vn' && (url.pathname === '/app' || url.pathname === '/app/')
+		);
 	} catch {
 		return false;
 	}

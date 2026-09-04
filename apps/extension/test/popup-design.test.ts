@@ -40,4 +40,41 @@ describe('extension popup visual structure', () => {
 		assert.equal(/Mở MyBK/.test(html), false);
 		assert.match(main, /bkalendar:tracking:run-now/);
 	});
+
+	it('lets the user choose a polling interval and explains startup tracking', async () => {
+		const [html, main] = await Promise.all([
+			readFile(htmlPath, 'utf8'),
+			readFile(mainPath, 'utf8')
+		]);
+
+		assert.match(html, /id="polling-interval"/);
+		assert.match(html, /Mỗi 5 phút/);
+		assert.match(html, /Mỗi 10 phút/);
+		assert.match(html, /ngay khi trình duyệt khởi động/);
+		assert.match(main, /bkalendar:polling:set-interval/);
+	});
+
+	it('shows whether the local bridge to the BKalendar website is active', async () => {
+		const [html, main] = await Promise.all([
+			readFile(htmlPath, 'utf8'),
+			readFile(mainPath, 'utf8')
+		]);
+
+		assert.match(html, /id="web-sync-section"/);
+		assert.match(html, /id="web-bridge-state"/);
+		assert.match(html, /Kết nối BKalendar Web/);
+		assert.match(html, /Web → Extension/);
+		assert.match(html, /Màu môn học · Icon sự kiện · Hồ sơ lịch và Calendar ID/);
+		assert.match(html, /Extension → Web/);
+		assert.match(html, /TKB MyBK mới nhất · Diff thay đổi · Trạng thái đồng bộ/);
+		assert.match(html, /id="web-sync-courses"/);
+		assert.match(html, /id="open-web"/);
+		assert.match(main, /bkalendar:web-bridge:status:get/);
+		assert.match(main, /--course-color/);
+		assert.match(main, /summarizeCourseAppearances/);
+		assert.ok(
+			html.indexOf('id="web-sync-section"') < html.indexOf('id="settings-disclosure"'),
+			'web connection must be a standalone section before automation settings'
+		);
+	});
 });

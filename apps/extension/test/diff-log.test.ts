@@ -49,6 +49,7 @@ describe('safe local diff log', () => {
 			['added', 'changed', 'removed']
 		);
 		assert.match(log.details[1]?.description ?? '', /H3-301 → H3-302/);
+		assert.equal(log.details[1]?.courseCode, 'PH1003');
 		assert.equal(JSON.stringify(log).includes('password'), false);
 	});
 });

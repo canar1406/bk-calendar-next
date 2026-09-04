@@ -5,8 +5,16 @@ import {
 	createExtensionTransferEmptyResponse,
 	createExtensionTransferResponse,
 	createSnapshot,
+	createExtensionStateRequest,
+	createExtensionStateResponse,
+	createExtensionStateUpdate,
+	createExtensionProfileSyncMessage,
 	isExtensionTransferRequest,
-	isExtensionTransferResponse
+	isExtensionTransferResponse,
+	isExtensionStateReply,
+	isExtensionStateRequest,
+	isExtensionStateUpdate,
+	isExtensionProfileSyncMessage
 } from '../src/index.ts';
 
 describe('extension-to-web transfer protocol', () => {
@@ -61,6 +69,46 @@ describe('extension-to-web transfer protocol', () => {
 				type: 'bkalendar:request-pending-snapshot',
 				version: 1,
 				requestId: ''
+			}),
+			false
+		);
+	});
+
+	it('round-trips a versioned extension state without exposing credentials', () => {
+		const state = {
+			schemaVersion: 1 as const,
+			updatedAt: '2026-09-04T16:00:00.000Z',
+			profiles: [
+				{
+					schemaVersion: 1 as const,
+					profileId: 'student-2024:261',
+					sourceKind: 'student-2024' as const,
+					semester: 261,
+					calendarName: 'BKalendar • HK 261',
+					calendarId: 'calendar-123',
+					lastCheckedAt: '2026-09-04T16:00:00.000Z'
+				}
+			],
+			appearances: {},
+			status: { state: 'idle' as const }
+		};
+
+		const request = createExtensionStateRequest('state-request');
+		const response = createExtensionStateResponse('state-request', state);
+		const update = createExtensionStateUpdate(state);
+
+		assert.equal(isExtensionStateRequest(request), true);
+		assert.equal(isExtensionStateReply(response), true);
+		assert.equal(isExtensionStateUpdate(update), true);
+		assert.equal(
+			isExtensionProfileSyncMessage(createExtensionProfileSyncMessage(state.profiles[0]!)),
+			true
+		);
+		assert.equal(isExtensionStateReply({ ...response, version: 2 }), false);
+		assert.equal(
+			isExtensionStateReply({
+				...response,
+				state: { ...state, profiles: [{ ...state.profiles[0], calendarName: undefined }] }
 			}),
 			false
 		);

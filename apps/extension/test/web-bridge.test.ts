@@ -4,10 +4,12 @@ import {
 	PROFILE_STORAGE_KEY,
 	REVIEW_ORIGIN,
 	REVIEW_PATH_PREFIX,
+	createLocalExtensionState,
 	handleExtensionTransferMessage,
 	selectNewestPendingSnapshot
 } from '../src/bridge/web-review.ts';
 import type {
+	ExtensionStateReply,
 	ExtensionTransferResponse,
 	TimetableSnapshot
 } from '../../../packages/timetable/src/index.ts';
@@ -44,7 +46,7 @@ describe('extension-to-web review bridge', () => {
 
 	it('responds to a valid page request with the matching nonce and newest snapshot', async () => {
 		const source = {} as MessageEventSource;
-		const responses: ExtensionTransferResponse[] = [];
+		const responses: Array<ExtensionTransferResponse | ExtensionStateReply> = [];
 		let storageReads = 0;
 
 		const handled = await handleExtensionTransferMessage(
@@ -89,9 +91,140 @@ describe('extension-to-web review bridge', () => {
 		]);
 	});
 
+	it('responds with the complete sanitized extension state', async () => {
+		const source = {} as MessageEventSource;
+		const responses: Array<ExtensionTransferResponse | ExtensionStateReply> = [];
+		const state = createLocalExtensionState(
+			[
+				{
+					schemaVersion: 1,
+					profileId: 'student-2024:261',
+					sourceKind: 'student-2024',
+					semester: 261,
+					calendarName: 'BKalendar • HK 261',
+					acceptedSnapshot: snapshot('2026-09-04T01:00:00.000Z', 'accepted'),
+					accessToken: 'must-not-reach-state'
+				}
+			],
+			{ state: 'idle' },
+			'2026-09-04T01:00:00.000Z'
+		);
+
+		const handled = await handleExtensionTransferMessage(
+			{
+				source,
+				origin: REVIEW_ORIGIN,
+				data: {
+					source: 'bkalendar-web',
+					type: 'bkalendar:request-state',
+					version: 1,
+					requestId: 'state-123'
+				}
+			},
+			{
+				windowSource: source,
+				origin: REVIEW_ORIGIN,
+				pathname: REVIEW_PATH_PREFIX,
+				async readProfiles() {
+					return [];
+				},
+				async readExtensionState() {
+					return state;
+				},
+				postResponse(response) {
+					responses.push(response);
+				}
+			}
+		);
+
+		assert.equal(handled, true);
+		assert.deepEqual(responses, [
+			{
+				source: 'bkalendar-extension',
+				type: 'bkalendar:state',
+				version: 1,
+				requestId: 'state-123',
+				status: 'ready',
+				state
+			}
+		]);
+		assert.equal(JSON.stringify(responses).includes('must-not-reach-state'), false);
+	});
+
+	it('includes only course appearance records from extension storage', () => {
+		const preferences = {
+			schemaVersion: 1,
+			mode: 'course',
+			seed: 2,
+			monoColorId: '7',
+			overrides: { MT1003: '5' },
+			icons: { MT1003: '🧮' }
+		};
+		const state = createLocalExtensionState([], { state: 'idle' }, '2026-09-04T16:00:00.000Z', {
+			'bkalendar-next:course-colors:student-2024%3A261': preferences,
+			'bkalendar-next:mybk-credentials': { ciphertext: 'secret' }
+		});
+
+		assert.deepEqual(state.appearances, {
+			'bkalendar-next:course-colors:student-2024%3A261': preferences
+		});
+		assert.equal(JSON.stringify(state).includes('ciphertext'), false);
+	});
+
+	it('accepts a newer web profile without allowing token fields into extension storage', async () => {
+		const source = {} as MessageEventSource;
+		const writes: unknown[] = [];
+		const profile = {
+			schemaVersion: 1 as const,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024' as const,
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			lastCheckedAt: '2026-09-05T01:00:00.000Z',
+			accessToken: 'must-not-be-written'
+		};
+
+		const handled = await handleExtensionTransferMessage(
+			{
+				source,
+				origin: REVIEW_ORIGIN,
+				data: {
+					source: 'bkalendar-web',
+					type: 'bkalendar:sync-profile',
+					version: 1,
+					profile
+				}
+			},
+			{
+				windowSource: source,
+				origin: REVIEW_ORIGIN,
+				pathname: REVIEW_PATH_PREFIX,
+				async readProfiles() {
+					return [];
+				},
+				async writeProfile(value) {
+					writes.push(value);
+				},
+				postResponse() {}
+			}
+		);
+
+		assert.equal(handled, true);
+		assert.deepEqual(writes, [
+			{
+				schemaVersion: 1,
+				profileId: 'student-2024:261',
+				sourceKind: 'student-2024',
+				semester: 261,
+				calendarName: 'BKalendar • HK 261',
+				lastCheckedAt: '2026-09-05T01:00:00.000Z'
+			}
+		]);
+	});
+
 	it('returns an explicit empty response when no pending snapshot exists', async () => {
 		const source = {} as MessageEventSource;
-		const responses: ExtensionTransferResponse[] = [];
+		const responses: Array<ExtensionTransferResponse | ExtensionStateReply> = [];
 
 		const handled = await handleExtensionTransferMessage(
 			{

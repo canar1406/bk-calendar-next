@@ -42,10 +42,21 @@ export function createCaptureStatus(
 	};
 }
 
-export function createErrorStatus(_error: unknown, checkedAt: string): ExtensionStatus {
+export function createErrorStatus(error: unknown, checkedAt: string): ExtensionStatus {
 	return {
 		state: 'error',
 		checkedAt,
-		message: 'Không đọc được thời khóa biểu. Hãy mở đúng trang TKB MyBK và thử tải lại.'
+		message: safeErrorMessage(error)
 	};
+}
+
+function safeErrorMessage(error: unknown): string {
+	const message = error instanceof Error ? error.message.trim() : '';
+	if (!message || /failed to fetch|networkerror|load failed/i.test(message)) {
+		return 'Không thể kết nối MyBK trong nền. Hãy kiểm tra mạng và quyền truy cập của extension.';
+	}
+	if (/password|access[_ -]?token|refresh[_ -]?token|authorization/i.test(message)) {
+		return 'Không thể đọc thời khóa biểu MyBK. Thông tin nhạy cảm đã được ẩn.';
+	}
+	return message.slice(0, 240);
 }

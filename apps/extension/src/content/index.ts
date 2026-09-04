@@ -46,11 +46,14 @@ async function captureCurrentPage(): Promise<void> {
 		if (signature === lastResultSignature) return;
 		lastResultSignature = signature;
 		await sendMessage({ type: 'bkalendar:capture', capture });
-	} catch {
+	} catch (error) {
 		const signature = 'capture-error';
 		if (signature === lastResultSignature) return;
 		lastResultSignature = signature;
-		await sendMessage({ type: 'bkalendar:capture-error' });
+		await sendMessage({
+			type: 'bkalendar:capture-error',
+			reason: error instanceof Error ? error.message : 'unknown-capture-error'
+		});
 	}
 }
 

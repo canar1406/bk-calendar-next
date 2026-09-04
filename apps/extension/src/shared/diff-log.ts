@@ -4,6 +4,7 @@ export const LAST_DIFF_STORAGE_KEY = 'bkalendar-next:last-diff';
 
 export interface DiffDetail {
 	kind: 'added' | 'changed' | 'removed';
+	courseCode?: string;
 	title: string;
 	description: string;
 }
@@ -30,16 +31,19 @@ export function createDiffLog(
 		details: [
 			...diff.added.map(({ after }) => ({
 				kind: 'added' as const,
+				courseCode: after.courseCode,
 				title: eventTitle(after),
 				description: `Thêm ${eventSchedule(after)}`
 			})),
 			...diff.changed.map(({ before, after, changedFields }) => ({
 				kind: 'changed' as const,
+				courseCode: after.courseCode,
 				title: eventTitle(after),
 				description: describeChangedFields(before, after, changedFields)
 			})),
 			...diff.removed.map(({ before }) => ({
 				kind: 'removed' as const,
+				courseCode: before.courseCode,
 				title: eventTitle(before),
 				description: `Không còn thấy ${eventSchedule(before)} trên MyBK`
 			}))
@@ -72,6 +76,7 @@ export function readStoredDiffLog(value: unknown): StoredDiffLog | undefined {
 		return [
 			{
 				kind: detail.kind,
+				...(typeof detail.courseCode === 'string' ? { courseCode: detail.courseCode } : {}),
 				title: detail.title,
 				description: detail.description
 			}

@@ -15,5 +15,15 @@ describe('web extension introduction', () => {
 		assert.match(source, /github\.com\/canar1406\/bk-calendar-next/);
 		assert.match(source, /Chrome · Edge · MV3/);
 		assert.match(source, /Bạn luôn kiểm soát/);
+		assert.match(source, /Extension đã kết nối/);
+		assert.match(source, /Chưa phát hiện extension/);
+		assert.match(source, /Cài extension/);
+		assert.match(source, /extensionConnectionState === 'missing'/);
+		assert.match(source, /Web → Extension/);
+		assert.match(source, /Màu môn học, icon sự kiện, hồ sơ lịch và Calendar ID/);
+		assert.match(source, /Extension → Web/);
+		assert.match(source, /TKB MyBK mới nhất, diff thay đổi và trạng thái đồng bộ/);
+		assert.match(source, /courseAppearanceSummary/);
+		assert.match(source, /colorName/);
 	});
 });

@@ -15,17 +15,37 @@ export interface ExtensionIdentityApi {
 	}): Promise<string | undefined>;
 }
 
+export interface ExtensionTokenStore {
+	read(): Promise<{ token: string; expiresAt: number } | undefined>;
+	write(value: { token: string; expiresAt: number }): Promise<void>;
+	remove(): Promise<void>;
+}
+
 export async function requestGoogleToken(
 	identity: ExtensionIdentityApi,
 	interactive: boolean,
-	webClientId: string
+	webClientId: string,
+	tokenStore?: ExtensionTokenStore,
+	now: () => number = Date.now
 ): Promise<string> {
 	const nativeToken = await tryNativeToken(identity, interactive);
 	if (nativeToken) return nativeToken;
-	return await requestWebFlowToken(identity, interactive, webClientId);
+	const cached = await tokenStore?.read();
+	if (cached && cached.expiresAt - 60_000 > now()) return cached.token;
+	if (cached) await tokenStore?.remove();
+	const webToken = await requestWebFlowToken(identity, interactive, webClientId);
+	await tokenStore?.write({
+		token: webToken.token,
+		expiresAt: now() + webToken.expiresInSeconds * 1_000
+	});
+	return webToken.token;
 }
 
-export async function disconnectGoogle(identity: ExtensionIdentityApi): Promise<void> {
+export async function disconnectGoogle(
+	identity: ExtensionIdentityApi,
+	tokenStore?: ExtensionTokenStore
+): Promise<void> {
+	await tokenStore?.remove();
 	if (!identity.getAuthToken || !identity.removeCachedAuthToken) return;
 	try {
 		const result = await identity.getAuthToken({ interactive: false });
@@ -51,7 +71,7 @@ async function requestWebFlowToken(
 	identity: ExtensionIdentityApi,
 	interactive: boolean,
 	webClientId: string
-): Promise<string> {
+): Promise<{ token: string; expiresInSeconds: number }> {
 	if (!webClientId.trim()) throw new Error('Thiếu Google OAuth web client ID.');
 	const redirectUri = identity.getRedirectURL();
 	const state = randomState();
@@ -67,6 +87,7 @@ async function requestWebFlowToken(
 	}).toString();
 
 	let responseUrl: string | undefined;
+	let flowError: unknown;
 	try {
 		responseUrl = await identity.launchWebAuthFlow({
 			url: authUrl.href,
@@ -78,11 +99,16 @@ async function requestWebFlowToken(
 					}
 				: {})
 		});
-	} catch {
+	} catch (error) {
+		flowError = error;
 		responseUrl = undefined;
 	}
 	if (!responseUrl) {
-		throw new Error('Hãy mở BKalendar và chọn Kết nối Google Calendar.');
+		const reason =
+			flowError instanceof Error && flowError.message.trim()
+				? ` Chi tiết trình duyệt: ${flowError.message.trim()}`
+				: '';
+		throw new Error(`Không mở được màn hình. Hãy Kết nối Google Calendar lại.${reason}`);
 	}
 	const redirected = new URL(responseUrl);
 	if (
@@ -101,7 +127,11 @@ async function requestWebFlowToken(
 	}
 	const token = params.get('access_token');
 	if (!token) throw new Error('Google OAuth không trả về access token.');
-	return token;
+	const expiresIn = Number(params.get('expires_in'));
+	return {
+		token,
+		expiresInSeconds: Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 3_600
+	};
 }
 
 function randomState(): string {

@@ -98,6 +98,35 @@ describe('background MyBK CAS client', () => {
 		assert.equal(client.requests[0]?.init?.method, 'GET');
 	});
 
+	it('retries the timetable when MyBK sends an already-authenticated session to the app home', async () => {
+		const client = new ScriptedClient([
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/',
+				status: 200,
+				body: '<html><body>Ứng dụng BKPortal</body></html>'
+			},
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
+				status: 200,
+				body: timetableHtml
+			}
+		]);
+
+		const capture = await fetchMyBkTimetable(client, {
+			username: 'student',
+			password: 'secret'
+		});
+
+		assert.match(capture.raw, /AS1002/);
+		assert.deepEqual(
+			client.requests.map((request) => request.url),
+			[
+				'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
+				'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb'
+			]
+		);
+	});
+
 	it('logs into HCMUT CAS in the background and then reads the timetable', async () => {
 		const client = new ScriptedClient([
 			{
@@ -132,7 +161,7 @@ describe('background MyBK CAS client', () => {
 			client.requests.map((request) => request.url),
 			[
 				'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
-				'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas',
+				'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas&renew=true',
 				'https://sso.hcmut.edu.vn/cas/login;jsessionid=abc?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas',
 				'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb'
 			]
@@ -247,6 +276,39 @@ describe('background MyBK CAS client', () => {
 		assert.match(capture.raw, /AS1002/);
 	});
 
+	it('accepts a CAS form identified by its login action when the password input is outside the form', async () => {
+		const splitCasForm = `
+			<input name="password" type="password" />
+			<form action="/cas/login" method="post">
+				<input name="lt" type="hidden" value="LT-123" />
+			</form>`;
+		const client = new ScriptedClient([
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
+				status: 200,
+				body: myBkLoginHtml
+			},
+			{ url: 'https://sso.hcmut.edu.vn/cas/login', status: 200, body: splitCasForm },
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/',
+				status: 200,
+				body: '<html>Đăng nhập thành công</html>'
+			},
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
+				status: 200,
+				body: timetableHtml
+			}
+		]);
+
+		const capture = await fetchMyBkTimetable(client, {
+			username: 'student',
+			password: 'secret'
+		});
+
+		assert.match(capture.raw, /AS1002/);
+	});
+
 	it('falls back to the direct HTTPS CAS entry when MyBK emits an insecure login redirect', async () => {
 		const client = new InitialFailureClient([
 			{
@@ -274,7 +336,7 @@ describe('background MyBK CAS client', () => {
 		assert.match(capture.raw, /AS1002/);
 		assert.equal(
 			client.requests[1]?.url,
-			'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas'
+			'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas&renew=true'
 		);
 	});
 
@@ -307,6 +369,31 @@ describe('background MyBK CAS client', () => {
 				assert.ok(error instanceof Error);
 				assert.match(error.message, /Tài khoản hoặc mật khẩu MyBK không đúng/);
 				assert.equal(error.message.includes('never-leak-this'), false);
+				return true;
+			}
+		);
+	});
+
+	it('includes only safe response diagnostics when the login form is missing', async () => {
+		const client = new ScriptedClient([
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
+				status: 200,
+				body: myBkLoginHtml
+			},
+			{
+				url: 'https://sso.hcmut.edu.vn/cas/login',
+				status: 200,
+				body: '<html><body>CAS temporarily unavailable</body></html>'
+			}
+		]);
+
+		await assert.rejects(
+			() => fetchMyBkTimetable(client, { username: 'student', password: 'never-log' }),
+			(error: unknown) => {
+				assert.ok(error instanceof Error);
+				assert.match(error.message, /forms=0; casAction=false; passwordField=false/);
+				assert.equal(error.message.includes('never-log'), false);
 				return true;
 			}
 		);

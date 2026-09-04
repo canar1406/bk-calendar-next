@@ -40,3 +40,7 @@ export function decideTrackingAction(mode: TrackingMode, changes: ChangeSummary)
 export function isTrackingMode(value: unknown): value is TrackingMode {
 	return value === 'off' || value === 'review' || value === 'auto-safe';
 }
+
+export function requiresGoogleConnection(mode: TrackingMode): boolean {
+	return mode === 'auto-safe';
+}

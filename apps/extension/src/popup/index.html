@@ -75,6 +75,36 @@
 				</div>
 			</aside>
 
+			<section id="web-sync-section" class="web-sync-card" aria-labelledby="web-sync-title">
+				<div class="web-sync-heading">
+					<div>
+						<p class="eyebrow">Đồng bộ cục bộ</p>
+						<h2 id="web-sync-title">Kết nối BKalendar Web</h2>
+					</div>
+					<span id="web-bridge-state" class="local-badge">Đang kiểm tra…</span>
+				</div>
+				<p class="web-sync-description">
+					Kết nối chỉ hoạt động trên thiết bị này khi trang BKalendar đang mở.
+				</p>
+				<div class="web-sync-overview">
+					<div>
+						<strong>Web → Extension</strong>
+						<span>Màu môn học · Icon sự kiện · Hồ sơ lịch và Calendar ID</span>
+					</div>
+					<div>
+						<strong>Extension → Web</strong>
+						<span>TKB MyBK mới nhất · Diff thay đổi · Trạng thái đồng bộ</span>
+					</div>
+				</div>
+				<div class="web-sync-course-section">
+					<h3>Màu và icon đang dùng</h3>
+					<div id="web-sync-courses" class="web-sync-courses">
+						<p>Chưa nhận cấu hình môn học từ web.</p>
+					</div>
+				</div>
+				<button id="open-web" class="web-sync-action" type="button">Mở BKalendar Web</button>
+			</section>
+
 			<details id="settings-disclosure" class="settings-disclosure">
 				<summary>
 					<span>
@@ -97,6 +127,18 @@
 							<option value="review" selected>Phát hiện và hỏi trước</option>
 							<option value="auto-safe">Tự động cập nhật và báo sau</option>
 						</select>
+					</label>
+
+					<label class="field" for="polling-interval">
+						<span>Kiểm tra MyBK định kỳ</span>
+						<select id="polling-interval">
+							<option value="5">Mỗi 5 phút</option>
+							<option value="10" selected>Mỗi 10 phút</option>
+							<option value="15">Mỗi 15 phút</option>
+							<option value="30">Mỗi 30 phút</option>
+							<option value="60">Mỗi 60 phút</option>
+						</select>
+						<small>Extension cũng kiểm tra một lần ngay khi trình duyệt khởi động.</small>
 					</label>
 
 					<div class="google-connection">

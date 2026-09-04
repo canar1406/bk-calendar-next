@@ -1,9 +1,9 @@
 {
 	"manifest_version": 3,
 	"name": "BKalendar Next",
-	"version": "0.4.0",
+	"version": "0.4.2",
 	"description": "Đọc thời khóa biểu MyBK cục bộ và báo trạng thái để bạn chủ động xem lại.",
-	"permissions": ["storage", "alarms", "notifications", "identity"],
+	"permissions": ["storage", "alarms", "notifications", "identity", "scripting"],
 	"host_permissions": [
 		"https://mybk.hcmut.edu.vn/app/*",
 		"http://mybk.hcmut.edu.vn/app/*",

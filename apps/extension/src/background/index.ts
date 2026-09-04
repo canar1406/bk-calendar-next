@@ -9,10 +9,10 @@ import { createProfileStore } from '../../../../packages/timetable/src/storage.t
 import { isContentMessage, isPopupMessage, type PopupMessage } from '../shared/messages.ts';
 import { createChromeStorage } from '../storage/chrome.ts';
 import { createChromeCredentialVault } from '../auth/chrome-vault.ts';
-import { createFetchMyBkHttpClient, fetchMyBkTimetable } from './mybk-client.ts';
 import {
 	decideTrackingAction,
 	isTrackingMode,
+	requiresGoogleConnection,
 	type ChangeSummary,
 	type TrackingMode
 } from './tracking-policy.ts';
@@ -24,6 +24,11 @@ import {
 import { syncPendingProfile } from '../../../../packages/google-calendar/src/profile-sync.ts';
 import { GOOGLE_WEB_CLIENT_ID, disconnectGoogle, requestGoogleToken } from './google-auth.ts';
 import {
+	createGoogleTokenStore,
+	createMemoryTokenStorageArea,
+	selectTokenStorageArea
+} from './google-token-store.ts';
+import {
 	TRACKING_NOTIFICATION_ID,
 	buildTrackingNotification,
 	isTrackingNotification,
@@ -32,22 +37,53 @@ import {
 import { LAST_DIFF_STORAGE_KEY, createDiffLog } from '../shared/diff-log.ts';
 import { courseColorStorageKey } from '../../../../packages/google-calendar/src/course-appearance.ts';
 import { prepareEventsWithCourseAppearance } from '../shared/course-appearance.ts';
+import {
+	MYBK_TIMETABLE_URL,
+	captureInHiddenTab,
+	createHiddenCaptureRegistry,
+	submitCasCredentials
+} from './hidden-tab-capture.ts';
+import {
+	DEFAULT_POLLING_INTERVAL_MINUTES,
+	normalizePollingIntervalMinutes,
+	type PollingIntervalMinutes
+} from './polling.ts';
+import { createLocalExtensionState, PROFILE_STORAGE_KEY } from '../bridge/web-review.ts';
+import { handleWebBridgeRuntimeRequest } from './web-bridge-runtime.ts';
+import {
+	isWebBridgeRuntimeRequest,
+	type WebBridgeStatePush
+} from '../shared/web-bridge-runtime.ts';
+import { detectWebBridgeConnection, WEB_APP_URL_PATTERN } from './web-bridge-presence.ts';
 
 const TRACKING_ALARM = 'bkalendar-next:track-mybk';
 const TRACKING_MODE_KEY = 'bkalendar-next:tracking-mode';
+const POLLING_INTERVAL_KEY = 'bkalendar-next:polling-interval-minutes';
 const DEFAULT_TRACKING_MODE: TrackingMode = 'review';
-const ALARM_PERIOD_MINUTES = 30;
 let activeTrackingRun: Promise<void> | undefined;
+const hiddenCaptureRegistry = createHiddenCaptureRegistry();
+const googleTokenStore = createGoogleTokenStore(
+	selectTokenStorageArea(chrome.storage.session, createMemoryTokenStorageArea())
+);
 
 chrome.runtime.onInstalled.addListener(() => {
 	void initializeExtension();
 });
 
+chrome.runtime.onStartup.addListener(() => {
+	void handleStartup();
+});
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
 	if (sender.id !== chrome.runtime.id) return false;
 
+	if (isWebBridgeRuntimeRequest(message)) {
+		void handleWebBridgeRuntimeMessage(message, sender.tab?.url ?? sender.url)
+			.then((value) => sendResponse({ ok: true, value }))
+			.catch((error) => sendResponse({ ok: false, message: safeMessage(error) }));
+		return true;
+	}
 	if (isContentMessage(message)) {
-		void handleContentMessage(message)
+		void handleContentMessage(message, sender.tab?.id)
 			.then(() => sendResponse({ ok: true }))
 			.catch((error) => sendResponse({ ok: false, message: safeMessage(error) }));
 		return true;
@@ -71,13 +107,28 @@ chrome.notifications.onClicked.addListener((notificationId) => {
 	void openDiffDetails(notificationId);
 });
 
+chrome.storage.onChanged.addListener((changes, areaName) => {
+	if (areaName !== 'local' || !hasWebStateChange(changes)) return;
+	void broadcastWebState();
+});
+
 void hardenLocalStorage();
 
 async function initializeExtension(): Promise<void> {
 	await hardenLocalStorage();
 	await initializeStatus();
+	await scheduleTrackingAlarm();
+}
+
+async function handleStartup(): Promise<void> {
+	await googleTokenStore.remove();
+	await initializeExtension();
+	await runBackgroundTracking();
+}
+
+async function scheduleTrackingAlarm(): Promise<void> {
 	await chrome.alarms.create(TRACKING_ALARM, {
-		periodInMinutes: ALARM_PERIOD_MINUTES
+		periodInMinutes: await readPollingInterval()
 	});
 }
 
@@ -85,34 +136,110 @@ async function hardenLocalStorage(): Promise<void> {
 	await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
 }
 
+async function handleWebBridgeRuntimeMessage(
+	message: unknown,
+	senderUrl: string | undefined
+): Promise<unknown> {
+	const result = await handleWebBridgeRuntimeRequest(message, senderUrl, {
+		async readProfiles() {
+			const stored = await chrome.storage.local.get(PROFILE_STORAGE_KEY);
+			return stored[PROFILE_STORAGE_KEY];
+		},
+		async readState() {
+			return await readLocalExtensionState();
+		},
+		async saveProfile(profile) {
+			const store = createProfileStore(createChromeStorage(chrome.storage.local));
+			await store.save(profile);
+		},
+		async saveAppearance(profileId, preferences) {
+			await chrome.storage.local.set({
+				[courseColorStorageKey(profileId)]: preferences
+			});
+		}
+	});
+	if (!result.handled) throw new Error('Web BKalendar không được phép truy cập bridge.');
+	return result.value;
+}
+
+async function readLocalExtensionState() {
+	const stored = await chrome.storage.local.get(null);
+	return createLocalExtensionState(
+		stored[PROFILE_STORAGE_KEY],
+		stored[EXTENSION_STATUS_KEY],
+		undefined,
+		stored
+	);
+}
+
+function hasWebStateChange(changes: Record<string, chrome.storage.StorageChange>): boolean {
+	return (
+		changes[PROFILE_STORAGE_KEY] !== undefined ||
+		changes[EXTENSION_STATUS_KEY] !== undefined ||
+		Object.keys(changes).some((key) => key.startsWith('bkalendar-next:course-colors:'))
+	);
+}
+
+async function broadcastWebState(): Promise<void> {
+	const state = await readLocalExtensionState();
+	const message: WebBridgeStatePush = {
+		type: 'bkalendar:web-bridge:state:push',
+		state
+	};
+	const tabs = await chrome.tabs.query({
+		url: WEB_APP_URL_PATTERN
+	});
+	await Promise.all(
+		tabs.map(async (tab) => {
+			if (typeof tab.id !== 'number') return;
+			await chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+		})
+	);
+}
+
+async function hasWebBridgeConnection(): Promise<boolean> {
+	return await detectWebBridgeConnection({
+		queryTabs: async (properties) => await chrome.tabs.query(properties),
+		sendMessage: async (tabId, message) => await chrome.tabs.sendMessage(tabId, message)
+	});
+}
+
 async function handlePopupMessage(message: PopupMessage): Promise<{
 	configured?: boolean;
 	trackingMode?: TrackingMode;
 	googleConnected?: boolean;
+	pollingIntervalMinutes?: PollingIntervalMinutes;
+	webConnected?: boolean;
 }> {
 	const vault = createChromeCredentialVault();
+	if (message.type === 'bkalendar:web-bridge:status:get') {
+		return { webConnected: await hasWebBridgeConnection() };
+	}
 	if (message.type === 'bkalendar:settings:get') {
 		return {
 			configured: await vault.hasCredentials(),
 			trackingMode: await readTrackingMode(),
-			googleConnected: await hasGoogleConnection()
+			googleConnected: await hasGoogleConnection(),
+			pollingIntervalMinutes: await readPollingInterval(),
+			webConnected: await hasWebBridgeConnection()
 		};
 	}
 	if (message.type === 'bkalendar:google:connect') {
-		await requestGoogleToken(chrome.identity, true, GOOGLE_WEB_CLIENT_ID);
-		await runBackgroundTracking();
+		await requestGoogleToken(chrome.identity, true, GOOGLE_WEB_CLIENT_ID, googleTokenStore);
 		return {
 			configured: await vault.hasCredentials(),
 			trackingMode: await readTrackingMode(),
-			googleConnected: true
+			googleConnected: true,
+			pollingIntervalMinutes: await readPollingInterval()
 		};
 	}
 	if (message.type === 'bkalendar:google:disconnect') {
-		await disconnectGoogle(chrome.identity);
+		await disconnectGoogle(chrome.identity, googleTokenStore);
 		return {
 			configured: await vault.hasCredentials(),
 			trackingMode: await readTrackingMode(),
-			googleConnected: false
+			googleConnected: false,
+			pollingIntervalMinutes: await readPollingInterval()
 		};
 	}
 	if (message.type === 'bkalendar:credentials:save') {
@@ -125,7 +252,8 @@ async function handlePopupMessage(message: PopupMessage): Promise<{
 		return {
 			configured: true,
 			trackingMode: message.trackingMode,
-			googleConnected: await hasGoogleConnection()
+			googleConnected: await hasGoogleConnection(),
+			pollingIntervalMinutes: await readPollingInterval()
 		};
 	}
 	if (message.type === 'bkalendar:credentials:remove') {
@@ -134,26 +262,50 @@ async function handlePopupMessage(message: PopupMessage): Promise<{
 		return {
 			configured: false,
 			trackingMode: 'off',
-			googleConnected: await hasGoogleConnection()
+			googleConnected: await hasGoogleConnection(),
+			pollingIntervalMinutes: await readPollingInterval()
+		};
+	}
+	if (message.type === 'bkalendar:polling:set-interval') {
+		await chrome.storage.local.set({
+			[POLLING_INTERVAL_KEY]: message.intervalMinutes
+		});
+		await scheduleTrackingAlarm();
+		return {
+			configured: await vault.hasCredentials(),
+			trackingMode: await readTrackingMode(),
+			googleConnected: await hasGoogleConnection(),
+			pollingIntervalMinutes: message.intervalMinutes
 		};
 	}
 	if (message.type === 'bkalendar:tracking:set-mode') {
 		if (message.trackingMode !== 'off' && !(await vault.hasCredentials())) {
 			throw new Error('Hãy lưu tài khoản MyBK trước khi bật theo dõi nền.');
 		}
+		if (requiresGoogleConnection(message.trackingMode)) {
+			try {
+				await requestGoogleToken(chrome.identity, true, GOOGLE_WEB_CLIENT_ID, googleTokenStore);
+			} catch {
+				throw new Error(
+					'Chế độ tự động cần Google Calendar. Hãy bấm “Kết nối” và cấp quyền trước khi bật.'
+				);
+			}
+		}
 		await saveTrackingMode(message.trackingMode);
 		if (message.trackingMode !== 'off') await runBackgroundTracking();
 		return {
 			configured: await vault.hasCredentials(),
 			trackingMode: message.trackingMode,
-			googleConnected: await hasGoogleConnection()
+			googleConnected: await hasGoogleConnection(),
+			pollingIntervalMinutes: await readPollingInterval()
 		};
 	}
 	await runBackgroundTracking(true);
 	return {
 		configured: await vault.hasCredentials(),
 		trackingMode: await readTrackingMode(),
-		googleConnected: await hasGoogleConnection()
+		googleConnected: await hasGoogleConnection(),
+		pollingIntervalMinutes: await readPollingInterval()
 	};
 }
 
@@ -178,7 +330,22 @@ async function performBackgroundTracking(force: boolean): Promise<void> {
 		return;
 	}
 	try {
-		const capture = await fetchMyBkTimetable(createFetchMyBkHttpClient(), credentials);
+		const capture = await captureInHiddenTab({
+			api: {
+				createWindow: (properties) => chrome.windows.create(properties),
+				updateWindow: (windowId, properties) => chrome.windows.update(windowId, properties),
+				update: (tabId, properties) => chrome.tabs.update(tabId, properties),
+				remove: (tabId) => chrome.tabs.remove(tabId),
+				removeWindow: (windowId) => chrome.windows.remove(windowId),
+				onUpdated: chrome.tabs.onUpdated
+			},
+			url: MYBK_TIMETABLE_URL,
+			credentials,
+			waitForCapture: (tabId) => hiddenCaptureRegistry.wait(tabId, 30_000),
+			cancelCapture: (tabId, error) => hiddenCaptureRegistry.reject(tabId, error),
+			submitCredentials: (tabId, savedCredentials) =>
+				submitCasCredentials(chrome.scripting, tabId, savedCredentials)
+		});
 		await processCapture(capture, mode);
 	} catch (error) {
 		const now = new Date().toISOString();
@@ -216,7 +383,12 @@ async function processCapture(
 		return;
 	}
 
-	const accessToken = await requestGoogleToken(chrome.identity, false, GOOGLE_WEB_CLIENT_ID);
+	const accessToken = await requestGoogleToken(
+		chrome.identity,
+		false,
+		GOOGLE_WEB_CLIENT_ID,
+		googleTokenStore
+	);
 	const appearanceKey = courseColorStorageKey(staged.profileId);
 	const storedAppearance = await chrome.storage.local.get(appearanceKey);
 	const synced = await syncPendingProfile(store, staged.profileId, {
@@ -279,6 +451,13 @@ async function saveTrackingMode(mode: TrackingMode): Promise<void> {
 	await chrome.storage.local.set({ [TRACKING_MODE_KEY]: mode });
 }
 
+async function readPollingInterval(): Promise<PollingIntervalMinutes> {
+	const stored = await chrome.storage.local.get(POLLING_INTERVAL_KEY);
+	return normalizePollingIntervalMinutes(
+		stored[POLLING_INTERVAL_KEY] ?? DEFAULT_POLLING_INTERVAL_MINUTES
+	);
+}
+
 async function stageCapture(capture: Parameters<typeof stageMyBkCapture>[1]): Promise<{
 	changes: ChangeSummary;
 	staged: Awaited<ReturnType<typeof stageMyBkCapture>>;
@@ -298,10 +477,14 @@ async function stageCapture(capture: Parameters<typeof stageMyBkCapture>[1]): Pr
 	return { changes, staged, store };
 }
 
-async function handleContentMessage(message: ReturnType<typeof asContentMessage>): Promise<void> {
+async function handleContentMessage(
+	message: ReturnType<typeof asContentMessage>,
+	tabId?: number
+): Promise<void> {
 	const now = new Date().toISOString();
 	let status: ExtensionStatus;
 	if (message.type === 'bkalendar:capture') {
+		if (typeof tabId === 'number' && hiddenCaptureRegistry.resolve(tabId, message.capture)) return;
 		try {
 			const mode = await readTrackingMode();
 			if (mode === 'auto-safe') {
@@ -314,6 +497,19 @@ async function handleContentMessage(message: ReturnType<typeof asContentMessage>
 			status = createErrorStatus(error, now);
 		}
 	} else {
+		if (
+			typeof tabId === 'number' &&
+			hiddenCaptureRegistry.reject(
+				tabId,
+				new Error(
+					message.reason
+						? `Không đọc được bảng TKB trên trang MyBK: ${message.reason}`
+						: 'Không đọc được bảng TKB trên trang MyBK.'
+				)
+			)
+		) {
+			return;
+		}
 		status = createErrorStatus(undefined, now);
 	}
 	await persistStatus(status);
@@ -339,7 +535,7 @@ function safeMessage(error: unknown): string {
 
 async function hasGoogleConnection(): Promise<boolean> {
 	try {
-		await requestGoogleToken(chrome.identity, false, GOOGLE_WEB_CLIENT_ID);
+		await requestGoogleToken(chrome.identity, false, GOOGLE_WEB_CLIENT_ID, googleTokenStore);
 		return true;
 	} catch {
 		return false;

@@ -10,6 +10,7 @@ import {
 	createCourseColorStore,
 	defaultCourseColorPreferences,
 	randomizeCourseColors,
+	summarizeCourseAppearances,
 	type CourseColorPreferences
 } from '../src/lib/course-colors.ts';
 
@@ -105,6 +106,50 @@ describe('course color preferences', () => {
 
 		assert.equal(custom.MT1003, '11');
 		assert.deepEqual(mono, { MT1003: '7', PH1003: '7' });
+	});
+
+	it('describes the actual color and icon synchronized for each course', () => {
+		const summaries = summarizeCourseAppearances(
+			[
+				{ ...event('MT1003'), title: 'Giải tích 1' },
+				{ ...event('MT1003', 1), title: 'Giải tích 1' },
+				{ ...event('PH1003'), title: 'Vật lý 1' }
+			],
+			{
+				...defaultCourseColorPreferences(),
+				overrides: { MT1003: '5', PH1003: '7' },
+				icons: { MT1003: '🧮', PH1003: '⚛️' }
+			}
+		);
+
+		assert.deepEqual(
+			summaries.map(({ courseCode, title, colorId, colorName, background, icon }) => ({
+				courseCode,
+				title,
+				colorId,
+				colorName,
+				background,
+				icon
+			})),
+			[
+				{
+					courseCode: 'MT1003',
+					title: 'Giải tích 1',
+					colorId: '5',
+					colorName: 'Vàng',
+					background: '#f6bf26',
+					icon: '🧮'
+				},
+				{
+					courseCode: 'PH1003',
+					title: 'Vật lý 1',
+					colorId: '7',
+					colorName: 'Xanh trời',
+					background: '#039be5',
+					icon: '⚛️'
+				}
+			]
+		);
 	});
 
 	it('includes the chosen color in the sync fingerprint without mutating source events', () => {

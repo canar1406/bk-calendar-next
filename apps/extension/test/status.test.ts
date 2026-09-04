@@ -28,14 +28,28 @@ describe('extension capture status', () => {
 
 	it('normalizes extraction failures into a user-safe status', () => {
 		const status: ExtensionStatus = createErrorStatus(
-			new Error('DOM details that should not be persisted'),
+			new Error('MyBK không chuyển đến trang đăng nhập HCMUT CAS.'),
 			'2026-09-03T01:00:00.000Z'
 		);
 
 		assert.deepEqual(status, {
 			state: 'error',
 			checkedAt: '2026-09-03T01:00:00.000Z',
-			message: 'Không đọc được thời khóa biểu. Hãy mở đúng trang TKB MyBK và thử tải lại.'
+			message: 'MyBK không chuyển đến trang đăng nhập HCMUT CAS.'
+		});
+	});
+
+	it('does not expose low-level fetch details or credentials in an error status', () => {
+		const status = createErrorStatus(
+			new TypeError('Failed to fetch password=secret'),
+			'2026-09-03T01:00:00.000Z'
+		);
+
+		assert.deepEqual(status, {
+			state: 'error',
+			checkedAt: '2026-09-03T01:00:00.000Z',
+			message:
+				'Không thể kết nối MyBK trong nền. Hãy kiểm tra mạng và quyền truy cập của extension.'
 		});
 	});
 

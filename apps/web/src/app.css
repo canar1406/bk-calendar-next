@@ -327,6 +327,117 @@ html[data-theme='dark'] .extension-cta:focus-visible {
 	font-size: 1rem;
 }
 
+.extension-connection {
+	display: inline-flex;
+	width: fit-content;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 11px;
+	border: 1px solid rgba(255, 255, 255, 0.26);
+	border-radius: 999px;
+	color: #d9edf7;
+	font-size: 0.72rem;
+	font-weight: 700;
+}
+
+.extension-connection > span {
+	width: 8px;
+	height: 8px;
+	border-radius: 999px;
+	background: #f6bf26;
+	box-shadow: 0 0 0 4px rgba(246, 191, 38, 0.14);
+}
+
+.extension-connection[data-state='connected'] > span {
+	background: #4dd7ad;
+	box-shadow: 0 0 0 4px rgba(77, 215, 173, 0.14);
+}
+
+.extension-connection[data-state='missing'] > span {
+	background: #ef7d88;
+	box-shadow: 0 0 0 4px rgba(239, 125, 136, 0.14);
+}
+
+.extension-sync-overview {
+	display: grid;
+	max-width: 680px;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.extension-sync-overview > div {
+	display: grid;
+	gap: 5px;
+	padding: 12px 13px;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 10px;
+	background: rgba(4, 28, 45, 0.24);
+}
+
+.extension-sync-overview strong {
+	color: #f1fbff;
+	font-size: 0.76rem;
+}
+
+.extension-sync-overview span {
+	color: #c5e1ee;
+	font-size: 0.7rem;
+	line-height: 1.55;
+}
+
+.extension-synced-courses {
+	display: grid;
+	max-width: 680px;
+	gap: 8px;
+}
+
+.extension-synced-courses > strong {
+	color: #f1fbff;
+	font-size: 0.75rem;
+}
+
+.extension-synced-courses > p {
+	margin: 0;
+	color: #c5e1ee;
+	font-size: 0.7rem;
+}
+
+.extension-synced-courses > div {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 7px;
+}
+
+.extension-synced-course {
+	display: inline-grid;
+	grid-template-columns: auto auto;
+	align-items: center;
+	gap: 2px 7px;
+	padding: 7px 9px;
+	border: 1px solid color-mix(in srgb, var(--course-color) 58%, rgba(255, 255, 255, 0.25));
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--course-color) 16%, rgba(4, 28, 45, 0.44));
+}
+
+.extension-synced-course i {
+	width: 9px;
+	height: 9px;
+	grid-row: span 2;
+	border-radius: 3px;
+	background: var(--course-color);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--course-color) 20%, transparent);
+}
+
+.extension-synced-course b {
+	color: #f8fcff;
+	font-size: 0.7rem;
+}
+
+.extension-synced-course small {
+	color: #c5e1ee;
+	font-size: 0.62rem;
+}
+
 .extension-benefits {
 	display: grid;
 	align-content: center;
@@ -900,6 +1011,10 @@ footer a {
 
 	html[data-theme='dark'] .extension-intro-copy {
 		padding: 24px;
+	}
+
+	.extension-sync-overview {
+		grid-template-columns: 1fr;
 	}
 }
 

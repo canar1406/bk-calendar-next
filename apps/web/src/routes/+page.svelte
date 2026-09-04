@@ -14,15 +14,20 @@
 		createBrowserStorage,
 		createProfileStore
 	} from '../../../../packages/timetable/src/storage.ts';
+	import { diffSnapshots } from '../../../../packages/timetable/src/index.ts';
 	import ChangeSummary from '$lib/components/ChangeSummary.svelte';
 	import CourseColorPicker from '$lib/components/CourseColorPicker.svelte';
 	import ScheduleBoard from '$lib/components/ScheduleBoard.svelte';
 	import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
 	import {
 		publishCourseAppearanceToExtension,
+		publishProfileToExtension,
+		requestExtensionStateFromExtension,
 		requestPendingSnapshotFromExtension,
+		subscribeToExtensionState,
 		type ExtensionMessageWindow
 	} from '$lib/extension-handoff.ts';
+	import type { ExtensionState } from '../../../../packages/timetable/src/index.ts';
 	import { loadGoogleIdentity } from '$lib/google-identity.ts';
 	import { syncPendingProfile } from '$lib/google-sync.ts';
 	import { createIcalendarExport, triggerIcalendarDownload } from '$lib/ical-download.ts';
@@ -31,6 +36,8 @@
 		colorizeEventsForSync,
 		createCourseColorStore,
 		defaultCourseColorPreferences,
+		summarizeCourseAppearances,
+		type CourseAppearanceSummary,
 		type CourseColorPreferences
 	} from '$lib/course-colors.ts';
 	import {
@@ -63,14 +70,79 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	let googleResult: SyncResult | undefined;
 	let calendarExportMessage = '';
 	let extensionHandoffMessage = '';
+	let extensionConnectionState: 'checking' | 'connected' | 'missing' = 'checking';
 	let courseColorPreferences = defaultCourseColorPreferences();
 	let courseColorAssignments: Record<string, string> = {};
+	let courseAppearanceSummary: CourseAppearanceSummary[] = [];
 
 	const googleClientId = env.PUBLIC_GOOGLE_CLIENT_ID?.trim() ?? '';
 
 	onMount(() => {
+		const targetWindow = window as unknown as ExtensionMessageWindow;
+		const unsubscribe = subscribeToExtensionState(targetWindow, (state) => {
+			extensionConnectionState = 'connected';
+			void applyExtensionState(state);
+		});
 		void receiveExtensionSnapshot();
+		void receiveExtensionState();
+		return unsubscribe;
 	});
+
+	async function receiveExtensionState(): Promise<void> {
+		try {
+			const response = await requestExtensionStateFromExtension({
+				targetWindow: window as unknown as ExtensionMessageWindow
+			});
+			if (response.status === 'ready') {
+				extensionConnectionState = 'connected';
+				await applyExtensionState(response.state);
+			} else if (response.status === 'empty') {
+				extensionConnectionState = 'connected';
+			} else {
+				extensionConnectionState = 'missing';
+			}
+		} catch {
+			extensionConnectionState = 'missing';
+		}
+	}
+
+	async function applyExtensionState(state: ExtensionState): Promise<void> {
+		for (const [key, preferences] of Object.entries(state.appearances)) {
+			if (key.startsWith('bkalendar-next:course-colors:')) {
+				window.localStorage.setItem(key, JSON.stringify(preferences));
+			}
+		}
+		const store = createProfileStore(createBrowserStorage(window.localStorage));
+		const orderedProfiles = [...state.profiles].sort(
+			(left, right) => timestamp(right.lastCheckedAt) - timestamp(left.lastCheckedAt)
+		);
+		for (const profile of orderedProfiles) {
+			if (!profile.pendingSnapshot && !profile.acceptedSnapshot) continue;
+			const existing = await store.get(profile.profileId);
+			if (existing && timestamp(existing.lastCheckedAt) > timestamp(profile.lastCheckedAt)) {
+				continue;
+			}
+			await store.save(profile);
+		}
+
+		const newest = orderedProfiles.find(
+			(profile) => profile.pendingSnapshot || profile.acceptedSnapshot
+		);
+		const snapshot = newest?.pendingSnapshot ?? newest?.acceptedSnapshot;
+		if (!newest || !snapshot || snapshot.provenance === 'sample') return;
+		const syncedProfile = await store.get(newest.profileId);
+		if (!syncedProfile) return;
+		result = {
+			profileId: newest.profileId,
+			snapshot,
+			diff: diffSnapshots(newest.acceptedSnapshot, snapshot),
+			profile: syncedProfile
+		};
+		loadCourseAppearance(result);
+		if (state.status.state === 'error') {
+			extensionHandoffMessage = state.status.message;
+		}
+	}
 
 	async function receiveExtensionSnapshot(): Promise<void> {
 		if (new URLSearchParams(window.location.search).get('from') !== 'extension') return;
@@ -101,6 +173,12 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		}
 	}
 
+	function timestamp(value: string | undefined): number {
+		if (!value) return 0;
+		const parsed = Date.parse(value);
+		return Number.isNaN(parsed) ? 0 : parsed;
+	}
+
 	async function importTimetable(): Promise<void> {
 		errorMessage = '';
 		if (source.trim() === '') {
@@ -125,6 +203,12 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 					provenance: 'user'
 				});
 				loadCourseAppearance(result);
+				if (result.profile) {
+					publishProfileToExtension({
+						targetWindow: window as unknown as ExtensionMessageWindow,
+						profile: result.profile
+					});
+				}
 			}
 		} catch (error) {
 			errorMessage =
@@ -154,6 +238,10 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			prepared.snapshot.events,
 			courseColorPreferences
 		);
+		courseAppearanceSummary = summarizeCourseAppearances(
+			prepared.snapshot.events,
+			courseColorPreferences
+		);
 		if (prepared.snapshot.provenance !== 'sample') {
 			publishCourseAppearanceToExtension({
 				targetWindow: window as unknown as ExtensionMessageWindow,
@@ -167,6 +255,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		courseColorPreferences = preferences;
 		if (!result) return;
 		courseColorAssignments = buildCourseColorAssignments(result.snapshot.events, preferences);
+		courseAppearanceSummary = summarizeCourseAppearances(result.snapshot.events, preferences);
 		if (result.snapshot.provenance !== 'sample') {
 			createCourseColorStore(window.localStorage).save(result.profileId, preferences);
 			publishCourseAppearanceToExtension({
@@ -227,6 +316,10 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			});
 			googleResult = synced.result;
 			result = { ...result, profile: synced.profile };
+			publishProfileToExtension({
+				targetWindow: window as unknown as ExtensionMessageWindow,
+				profile: synced.profile
+			});
 			googleMessage =
 				synced.result.failed.length > 0
 					? `Có ${synced.result.failed.length} thao tác chưa thành công. Snapshot vẫn đang chờ để thử lại.`
@@ -291,15 +384,61 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 				Cài extension BKalendar để kiểm tra thời khóa biểu nền và tự cập nhật Google Calendar khi
 				MyBK thay đổi — không cần sao chép lại mỗi lần.
 			</p>
-			<a
-				class="extension-cta"
-				href="https://github.com/canar1406/bk-calendar-next"
-				target="_blank"
-				rel="noreferrer"
+			<div
+				class="extension-connection"
+				data-state={extensionConnectionState}
+				role="status"
+				aria-live="polite"
 			>
-				Xem hướng dẫn cài extension
-				<span aria-hidden="true">↗</span>
-			</a>
+				<span aria-hidden="true"></span>
+				{extensionConnectionState === 'checking'
+					? 'Đang kiểm tra extension…'
+					: extensionConnectionState === 'connected'
+						? 'Extension đã kết nối cục bộ'
+						: 'Chưa phát hiện extension'}
+			</div>
+			<div class="extension-sync-overview" aria-label="Dữ liệu đồng bộ với extension">
+				<div>
+					<strong>Web → Extension</strong>
+					<span>Màu môn học, icon sự kiện, hồ sơ lịch và Calendar ID</span>
+				</div>
+				<div>
+					<strong>Extension → Web</strong>
+					<span>TKB MyBK mới nhất, diff thay đổi và trạng thái đồng bộ</span>
+				</div>
+			</div>
+			{#if extensionConnectionState === 'connected'}
+				<div class="extension-synced-courses">
+					<strong>Đã đồng bộ sang extension</strong>
+					{#if courseAppearanceSummary.length > 0}
+						<div>
+							{#each courseAppearanceSummary as appearance (appearance.course)}
+								<span
+									class="extension-synced-course"
+									style={`--course-color: ${appearance.background}`}
+								>
+									<i aria-hidden="true"></i>
+									<b>{appearance.icon || '•'} {appearance.courseCode}</b>
+									<small>{appearance.colorName}</small>
+								</span>
+							{/each}
+						</div>
+					{:else}
+						<p>Chưa có cấu hình màu và icon môn học để đồng bộ.</p>
+					{/if}
+				</div>
+			{/if}
+			{#if extensionConnectionState === 'missing'}
+				<a
+					class="extension-cta"
+					href="https://github.com/canar1406/bk-calendar-next"
+					target="_blank"
+					rel="noreferrer"
+				>
+					Cài extension
+					<span aria-hidden="true">↗</span>
+				</a>
+			{/if}
 		</div>
 		<div class="extension-benefits">
 			<div>

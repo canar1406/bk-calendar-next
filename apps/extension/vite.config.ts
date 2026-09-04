@@ -27,8 +27,6 @@ export default defineConfig({
 		rollupOptions: {
 			input: {
 				background: resolve(extensionRoot, 'src/background/index.ts'),
-				content: resolve(extensionRoot, 'src/content/index.ts'),
-				'web-review': resolve(extensionRoot, 'src/bridge/web-review.ts'),
 				popup: resolve(extensionRoot, 'src/popup/index.html')
 			},
 			output: {

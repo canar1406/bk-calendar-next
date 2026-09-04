@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { decideTrackingAction, type TrackingMode } from '../src/background/tracking-policy.ts';
+import {
+	decideTrackingAction,
+	requiresGoogleConnection,
+	type TrackingMode
+} from '../src/background/tracking-policy.ts';
 
 const changes = {
 	added: 2,
@@ -19,6 +23,12 @@ describe('background timetable tracking policy', () => {
 			shouldNotify: false,
 			requiresRemovalConfirmation: false
 		});
+	});
+
+	it('requires Google Calendar before enabling automatic updates', () => {
+		assert.equal(requiresGoogleConnection('auto-safe'), true);
+		assert.equal(requiresGoogleConnection('review'), false);
+		assert.equal(requiresGoogleConnection('off'), false);
 	});
 
 	it('stages and reports the full diff in review mode without writing Google', () => {

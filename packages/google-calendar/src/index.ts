@@ -209,12 +209,14 @@ export {
 	isCourseColorPreferences,
 	normalizeCourseColorPreferences,
 	randomizeCourseColors,
+	summarizeCourseAppearances,
 	type CourseAppearanceTransferMessage,
 	type CourseColorMode,
 	type CourseColorPalette,
 	type CourseColorPreferences,
 	type CourseColorStorage,
 	type CourseIcon,
+	type CourseAppearanceSummary,
 	type GoogleEventColor
 } from './course-appearance.ts';
 export {

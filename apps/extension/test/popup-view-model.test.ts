@@ -139,6 +139,34 @@ describe('extension popup view model', () => {
 		assert.equal(JSON.stringify(profiles).includes('must-not-reach-the-view'), false);
 	});
 
+	it('counts accepted events after an automatic sync promotes the pending snapshot', () => {
+		const profiles = summarizeStoredProfiles([
+			{
+				schemaVersion: 1,
+				profileId: 'student-2024:261',
+				sourceKind: 'student-2024',
+				semester: 261,
+				calendarName: 'BKalendar • HK 261',
+				lastCheckedAt: '2026-09-04T16:04:00.000Z',
+				acceptedSnapshot: {
+					schemaVersion: 1,
+					sourceKind: 'student-2024',
+					semester: 261,
+					capturedAt: '2026-09-04T16:04:00.000Z',
+					fingerprint: 'accepted',
+					warnings: [],
+					completeness: { state: 'complete', parsedRows: 8, expectedRows: 8 },
+					events: Array.from({ length: 8 }, (_, index) => ({
+						stableKey: `event-${index}`,
+						fingerprint: `fingerprint-${index}`
+					}))
+				}
+			}
+		]);
+
+		assert.equal(profiles[0]?.pendingEventCount, 8);
+	});
+
 	it('selects the most recently checked persisted profile', () => {
 		const selected = selectCurrentProfile([
 			{
@@ -224,6 +252,25 @@ describe('extension popup view model', () => {
 		assert.equal(viewModel.actionLabel, 'Kiểm tra MyBK trong nền');
 		assert.equal(viewModel.actionKind, 'background-check');
 		assert.equal(viewModel.actionUrl, undefined);
+	});
+
+	it('does not report no changes when MyBK is not configured', () => {
+		const viewModel = buildPopupViewModel(capturedStatus, currentProfile, false);
+
+		assert.equal(viewModel.title, 'Chưa cấu hình MyBK');
+		assert.match(viewModel.detail, /lưu tài khoản MyBK/i);
+		assert.deepEqual(viewModel.counts, { added: 0, changed: 0, removed: 0 });
+		assert.equal(viewModel.profileLabel, undefined);
+		assert.equal(viewModel.actionKind, 'open-settings');
+	});
+
+	it('requires Google before showing an automatic tracking result', () => {
+		const viewModel = buildPopupViewModel(capturedStatus, currentProfile, true, 'auto-safe', false);
+
+		assert.equal(viewModel.title, 'Cần kết nối Google Calendar');
+		assert.match(viewModel.detail, /Google Calendar chưa được kết nối/i);
+		assert.equal(viewModel.actionLabel, 'Kết nối Google Calendar');
+		assert.equal(viewModel.actionKind, 'connect-google');
 	});
 
 	it('keeps extraction errors local and offers only a retry action', () => {

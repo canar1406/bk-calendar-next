@@ -1,4 +1,5 @@
 import type { ExtensionStatus } from '../background/status.ts';
+import type { TrackingMode } from '../background/tracking-policy.ts';
 import {
 	diffSnapshots,
 	type ManagedEvent,
@@ -28,7 +29,8 @@ export interface PopupViewModel {
 	deletionBlocked: boolean;
 	warning?: string;
 	actionLabel: string;
-	actionKind: 'background-check' | 'open-web-review' | 'show-diff';
+	actionKind:
+		'background-check' | 'open-web-review' | 'show-diff' | 'open-settings' | 'connect-google';
 	actionUrl?: string;
 }
 
@@ -42,9 +44,37 @@ export function selectCurrentProfile(
 
 export function buildPopupViewModel(
 	status: ExtensionStatus,
-	profile?: StoredProfileSummary
+	profile?: StoredProfileSummary,
+	configured?: boolean,
+	trackingMode?: TrackingMode,
+	googleConnected?: boolean
 ): PopupViewModel {
 	const emptyCounts = { added: 0, changed: 0, removed: 0 };
+
+	if (configured === false) {
+		return {
+			tone: 'idle',
+			title: 'Chưa cấu hình MyBK',
+			detail: 'Hãy lưu tài khoản MyBK trong thiết lập để bắt đầu theo dõi thời khóa biểu.',
+			counts: emptyCounts,
+			deletionBlocked: false,
+			actionLabel: 'Thiết lập tài khoản MyBK',
+			actionKind: 'open-settings'
+		};
+	}
+
+	if (trackingMode === 'auto-safe' && googleConnected === false) {
+		return {
+			tone: 'warning',
+			title: 'Cần kết nối Google Calendar',
+			detail:
+				'Chế độ tự động chưa thể chạy vì Google Calendar chưa được kết nối. Hãy cấp quyền một lần để bật tự động cập nhật.',
+			counts: emptyCounts,
+			deletionBlocked: false,
+			actionLabel: 'Kết nối Google Calendar',
+			actionKind: 'connect-google'
+		};
+	}
 
 	if (status.state === 'idle') {
 		return {
@@ -132,10 +162,12 @@ export function summarizeStoredProfiles(value: unknown): StoredProfileSummary[] 
 			return [];
 		}
 
-		const pendingSnapshot =
+		const currentSnapshot =
 			profile.pendingSnapshot && typeof profile.pendingSnapshot === 'object'
 				? (profile.pendingSnapshot as Record<string, unknown>)
-				: undefined;
+				: profile.acceptedSnapshot && typeof profile.acceptedSnapshot === 'object'
+					? (profile.acceptedSnapshot as Record<string, unknown>)
+					: undefined;
 
 		return [
 			{
@@ -145,8 +177,8 @@ export function summarizeStoredProfiles(value: unknown): StoredProfileSummary[] 
 				...(typeof profile.lastCheckedAt === 'string'
 					? { lastCheckedAt: profile.lastCheckedAt }
 					: {}),
-				pendingEventCount: Array.isArray(pendingSnapshot?.events)
-					? pendingSnapshot.events.length
+				pendingEventCount: Array.isArray(currentSnapshot?.events)
+					? currentSnapshot.events.length
 					: 0
 			}
 		];
@@ -163,16 +195,19 @@ export function buildStoredDiffDetails(value: unknown, lastDiff?: unknown): Diff
 		return [
 			...diff.added.map(({ after }) => ({
 				kind: 'added' as const,
+				courseCode: after.courseCode,
 				title: eventTitle(after),
 				description: `Thêm ${eventSchedule(after)}`
 			})),
 			...diff.changed.map(({ before, after, changedFields }) => ({
 				kind: 'changed' as const,
+				courseCode: after.courseCode,
 				title: eventTitle(after),
 				description: describeChangedFields(before, after, changedFields)
 			})),
 			...diff.removed.map(({ before }) => ({
 				kind: 'removed' as const,
+				courseCode: before.courseCode,
 				title: eventTitle(before),
 				description: `Không còn thấy ${eventSchedule(before)} trên MyBK`
 			}))

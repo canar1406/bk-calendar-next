@@ -2,13 +2,22 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
 	disconnectGoogle,
+	GOOGLE_WEB_CLIENT_ID,
 	requestGoogleToken,
+	type ExtensionTokenStore,
 	type ExtensionIdentityApi
 } from '../src/background/google-auth.ts';
 
 const webClientId = '290456536857-ujdg26n2gqovjc27h2mqrd9p6vhm7pbp.apps.googleusercontent.com';
 
 describe('cross-browser extension Google OAuth', () => {
+	it('uses the Web OAuth client for the Edge launchWebAuthFlow fallback', () => {
+		assert.equal(
+			GOOGLE_WEB_CLIENT_ID,
+			'290456536857-ujdg26n2gqovjc27h2mqrd9p6vhm7pbp.apps.googleusercontent.com'
+		);
+	});
+
 	it('uses Chrome native token access when available', async () => {
 		const identity: ExtensionIdentityApi = {
 			async getAuthToken(details) {
@@ -50,6 +59,46 @@ describe('cross-browser extension Google OAuth', () => {
 		assert.equal(authUrl.searchParams.get('redirect_uri'), 'https://extension.chromiumapp.org/');
 		assert.equal(authUrl.searchParams.get('response_type'), 'token');
 		assert.equal(authUrl.searchParams.get('prompt'), 'select_account consent');
+	});
+
+	it('caches an Edge web-flow token for the silent follow-up check', async () => {
+		let launches = 0;
+		let cached: { token: string; expiresAt: number } | undefined;
+		const store: ExtensionTokenStore = {
+			async read() {
+				return cached;
+			},
+			async write(value) {
+				cached = value;
+			},
+			async remove() {
+				cached = undefined;
+			}
+		};
+		const identity: ExtensionIdentityApi = {
+			async getAuthToken() {
+				return {};
+			},
+			getRedirectURL() {
+				return 'https://extension.chromiumapp.org/';
+			},
+			async launchWebAuthFlow(details) {
+				launches += 1;
+				const state = new URL(details.url).searchParams.get('state');
+				return `https://extension.chromiumapp.org/#access_token=edge-token&expires_in=3600&state=${state}`;
+			}
+		};
+
+		assert.equal(
+			await requestGoogleToken(identity, true, webClientId, store, () => 1_000),
+			'edge-token'
+		);
+		assert.equal(
+			await requestGoogleToken(identity, false, webClientId, store, () => 2_000),
+			'edge-token'
+		);
+		assert.equal(launches, 1);
+		assert.deepEqual(cached, { token: 'edge-token', expiresAt: 3_601_000 });
 	});
 
 	it('uses a silent web auth flow for background checks', async () => {
@@ -132,6 +181,22 @@ describe('cross-browser extension Google OAuth', () => {
 		);
 	});
 
+	it('preserves a safe browser OAuth failure reason for diagnosis', async () => {
+		const identity: ExtensionIdentityApi = {
+			getRedirectURL() {
+				return 'https://extension.chromiumapp.org/';
+			},
+			async launchWebAuthFlow() {
+				throw new Error('Authorization page could not be loaded');
+			}
+		};
+
+		await assert.rejects(
+			() => requestGoogleToken(identity, true, webClientId),
+			/Authorization page could not be loaded/
+		);
+	});
+
 	it('removes a Chrome-cached token without persisting web-flow tokens', async () => {
 		let removed = '';
 		const identity: ExtensionIdentityApi = {
@@ -151,5 +216,29 @@ describe('cross-browser extension Google OAuth', () => {
 
 		await disconnectGoogle(identity);
 		assert.equal(removed, 'cached-token');
+	});
+
+	it('clears a cached Edge web-flow token on disconnect', async () => {
+		let removed = false;
+		const store: ExtensionTokenStore = {
+			async read() {
+				return { token: 'edge-token', expiresAt: Date.now() + 60_000 };
+			},
+			async write() {},
+			async remove() {
+				removed = true;
+			}
+		};
+		const identity: ExtensionIdentityApi = {
+			getRedirectURL() {
+				return 'https://extension.chromiumapp.org/';
+			},
+			async launchWebAuthFlow() {
+				return undefined;
+			}
+		};
+
+		await disconnectGoogle(identity, store);
+		assert.equal(removed, true);
 	});
 });

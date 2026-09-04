@@ -1,8 +1,14 @@
 import {
+	createExtensionStateRequest,
+	createExtensionProfileSyncMessage,
 	createExtensionTransferRequest,
+	isExtensionStateReply,
+	isExtensionStateUpdate,
 	isExtensionTransferResponse,
+	type ExtensionState,
 	type TimetableSnapshot
 } from '../../../../packages/timetable/src/index.ts';
+import type { SyncProfile } from '../../../../packages/timetable/src/storage.ts';
 import {
 	createCourseAppearanceTransferMessage,
 	type CourseColorPreferences
@@ -35,7 +41,18 @@ export type PendingSnapshotRequestResult =
 	| { status: 'empty' }
 	| { status: 'timeout' };
 
+export type ExtensionStateRequestResult =
+	{ status: 'ready'; state: ExtensionState } | { status: 'empty' } | { status: 'timeout' };
+
 export interface PendingSnapshotRequestOptions {
+	targetWindow: ExtensionMessageWindow;
+	timers?: ExtensionTransferTimers;
+	requestId?: string;
+	retryIntervalMs?: number;
+	timeoutMs?: number;
+}
+
+export interface ExtensionStateRequestOptions {
 	targetWindow: ExtensionMessageWindow;
 	timers?: ExtensionTransferTimers;
 	requestId?: string;
@@ -47,6 +64,86 @@ export interface PublishCourseAppearanceOptions {
 	targetWindow: Pick<ExtensionMessageWindow, 'location' | 'postMessage'>;
 	profileId: string;
 	preferences: CourseColorPreferences;
+}
+
+export interface PublishProfileOptions {
+	targetWindow: Pick<ExtensionMessageWindow, 'postMessage' | 'location'>;
+	profile: SyncProfile;
+}
+
+export function publishProfileToExtension({ targetWindow, profile }: PublishProfileOptions): void {
+	targetWindow.postMessage(
+		createExtensionProfileSyncMessage(profile),
+		targetWindow.location.origin
+	);
+}
+
+export function subscribeToExtensionState(
+	targetWindow: ExtensionMessageWindow,
+	onState: (state: ExtensionState) => void
+): () => void {
+	const origin = targetWindow.location.origin;
+	const handleMessage = (event: ExtensionMessageEvent): void => {
+		if (event.source !== targetWindow || event.origin !== origin) return;
+		if (!isExtensionStateUpdate(event.data)) return;
+		onState(event.data.state);
+	};
+	targetWindow.addEventListener('message', handleMessage);
+	return () => targetWindow.removeEventListener('message', handleMessage);
+}
+
+export async function requestExtensionStateFromExtension({
+	targetWindow,
+	timers = browserTimers,
+	requestId = createRequestId(),
+	retryIntervalMs = DEFAULT_RETRY_INTERVAL_MS,
+	timeoutMs = DEFAULT_TIMEOUT_MS
+}: ExtensionStateRequestOptions): Promise<ExtensionStateRequestResult> {
+	const request = createExtensionStateRequest(requestId);
+	const origin = targetWindow.location.origin;
+
+	return await new Promise((resolve) => {
+		let settled = false;
+		const timerHandles = new Set<unknown>();
+
+		const clearTimers = (): void => {
+			for (const handle of timerHandles) timers.clearTimeout(handle);
+			timerHandles.clear();
+		};
+		const finish = (result: ExtensionStateRequestResult): void => {
+			if (settled) return;
+			settled = true;
+			targetWindow.removeEventListener('message', handleMessage);
+			clearTimers();
+			resolve(result);
+		};
+		const handleMessage = (event: ExtensionMessageEvent): void => {
+			if (event.source !== targetWindow || event.origin !== origin) return;
+			if (!isExtensionStateReply(event.data) || event.data.requestId !== requestId) return;
+			finish(
+				event.data.status === 'ready'
+					? { status: 'ready', state: event.data.state }
+					: { status: 'empty' }
+			);
+		};
+		const schedule = (callback: () => void, delayMs: number): void => {
+			let handle: unknown;
+			handle = timers.setTimeout(() => {
+				timerHandles.delete(handle);
+				callback();
+			}, delayMs);
+			timerHandles.add(handle);
+		};
+		const sendRequest = (): void => {
+			if (settled) return;
+			targetWindow.postMessage(request, origin);
+			schedule(sendRequest, retryIntervalMs);
+		};
+
+		targetWindow.addEventListener('message', handleMessage);
+		sendRequest();
+		schedule(() => finish({ status: 'timeout' }), timeoutMs);
+	});
 }
 
 const DEFAULT_RETRY_INTERVAL_MS = 150;
