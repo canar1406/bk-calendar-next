@@ -1,6 +1,13 @@
 :root {
 	color: #13213c;
 	background: #f5f7fb;
+	color-scheme: light;
+	--popup-ink: #13213c;
+	--popup-muted: #52617a;
+	--popup-bg: #f5f7fb;
+	--popup-surface: rgb(255 255 255 / 90%);
+	--popup-line: #dce3ee;
+	--popup-input: white;
 	font-family:
 		Inter,
 		ui-sans-serif,
@@ -12,6 +19,18 @@
 	font-synthesis: none;
 }
 
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--popup-ink: #e6edf7;
+	--popup-muted: #a7b5c9;
+	--popup-bg: #111827;
+	--popup-surface: rgb(31 41 55 / 94%);
+	--popup-line: #3b4b63;
+	--popup-input: #1f2937;
+	color: var(--popup-ink);
+	background: var(--popup-bg);
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -20,7 +39,8 @@ body {
 	width: 380px;
 	min-height: 500px;
 	margin: 0;
-	background: radial-gradient(circle at 90% 0%, rgb(18 114 235 / 14%), transparent 35%), #f5f7fb;
+	background:
+		radial-gradient(circle at 90% 0%, rgb(18 114 235 / 14%), transparent 35%), var(--popup-bg);
 }
 
 main {
@@ -49,6 +69,27 @@ main {
 	letter-spacing: 0.04em;
 }
 
+.theme-control {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	color: var(--popup-muted);
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.theme-control select {
+	min-height: 32px;
+	padding: 0 8px;
+	border: 1px solid var(--popup-line);
+	border-radius: 8px;
+	color: var(--popup-ink);
+	background: var(--popup-input);
+	font: inherit;
+	font-size: 11px;
+}
+
 .eyebrow,
 h1,
 h2,
@@ -61,7 +102,7 @@ h2,
 }
 
 .eyebrow {
-	color: #52617a;
+	color: var(--popup-muted);
 	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
@@ -79,9 +120,9 @@ h1 {
 	grid-template-columns: auto 1fr;
 	gap: 12px;
 	padding: 16px;
-	border: 1px solid #dce3ee;
+	border: 1px solid var(--popup-line);
 	border-radius: 16px;
-	background: rgb(255 255 255 / 90%);
+	background: var(--popup-surface);
 	box-shadow: 0 10px 30px rgb(38 55 86 / 8%);
 }
 
@@ -117,7 +158,7 @@ h1 {
 
 .status-detail {
 	margin-top: 6px;
-	color: #52617a;
+	color: var(--popup-muted);
 	font-size: 13px;
 	line-height: 1.55;
 }
@@ -127,8 +168,8 @@ h1 {
 	gap: 2px;
 	margin-top: 12px;
 	padding-top: 10px;
-	border-top: 1px solid #e8edf5;
-	color: #68778e;
+	border-top: 1px solid var(--popup-line);
+	color: var(--popup-muted);
 	font-size: 11px;
 	line-height: 1.45;
 }
@@ -142,9 +183,9 @@ h1 {
 	display: grid;
 	gap: 12px;
 	padding: 15px;
-	border: 1px solid #dce3ee;
+	border: 1px solid var(--popup-line);
 	border-radius: 16px;
-	background: rgb(255 255 255 / 90%);
+	background: var(--popup-surface);
 }
 
 .google-connection {
@@ -153,9 +194,9 @@ h1 {
 	justify-content: space-between;
 	gap: 12px;
 	padding: 10px;
-	border: 1px solid #dce3ee;
+	border: 1px solid var(--popup-line);
 	border-radius: 11px;
-	background: #f8fafc;
+	background: color-mix(in srgb, var(--popup-bg) 82%, var(--popup-surface));
 }
 
 .google-connection > div:first-child {
@@ -168,7 +209,7 @@ h1 {
 }
 
 .google-connection span {
-	color: #68778e;
+	color: var(--popup-muted);
 	font-size: 10px;
 }
 
@@ -210,7 +251,7 @@ h1 {
 }
 
 .field span {
-	color: #52617a;
+	color: var(--popup-muted);
 	font-size: 11px;
 	font-weight: 700;
 }
@@ -220,10 +261,10 @@ h1 {
 	width: 100%;
 	min-height: 40px;
 	padding: 0 11px;
-	border: 1px solid #cbd5e1;
+	border: 1px solid var(--popup-line);
 	border-radius: 10px;
-	color: #13213c;
-	background: white;
+	color: var(--popup-ink);
+	background: var(--popup-input);
 	font: inherit;
 	font-size: 13px;
 }
@@ -240,7 +281,7 @@ h1 {
 	grid-template-columns: auto 1fr;
 	gap: 8px;
 	align-items: start;
-	color: #52617a;
+	color: var(--popup-muted);
 	font-size: 11px;
 	line-height: 1.45;
 }
@@ -284,7 +325,7 @@ h1 {
 .credential-message {
 	min-height: 16px;
 	margin: 0;
-	color: #52617a;
+	color: var(--popup-muted);
 	font-size: 11px;
 	line-height: 1.45;
 }
@@ -336,9 +377,9 @@ h2 {
 	gap: 4px;
 	min-width: 0;
 	padding: 13px 10px 12px;
-	border: 1px solid #dce3ee;
+	border: 1px solid var(--popup-line);
 	border-radius: 13px;
-	background: rgb(255 255 255 / 86%);
+	background: var(--popup-surface);
 }
 
 .change-card strong {
@@ -349,7 +390,7 @@ h2 {
 
 .change-card span {
 	overflow: hidden;
-	color: #5c6b82;
+	color: var(--popup-muted);
 	font-size: 11px;
 	font-weight: 650;
 	text-overflow: ellipsis;
@@ -419,7 +460,7 @@ h2 {
 }
 
 .diff-details li span {
-	color: #52617a;
+	color: var(--popup-muted);
 	font-size: 10px;
 	line-height: 1.45;
 }
@@ -489,7 +530,7 @@ h2 {
 
 .secondary-action {
 	justify-self: center;
-	color: #35557e;
+	color: var(--popup-muted);
 	font-size: 12px;
 	font-weight: 700;
 	text-underline-offset: 3px;
@@ -502,7 +543,7 @@ h2 {
 }
 
 .privacy-note {
-	color: #65738a;
+	color: var(--popup-muted);
 	font-size: 11px;
 	line-height: 1.5;
 	text-align: left;

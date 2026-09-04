@@ -8,6 +8,7 @@ import {
 } from './view-model.ts';
 import type { TrackingMode } from '../background/tracking-policy.ts';
 import { LAST_DIFF_STORAGE_KEY } from '../shared/diff-log.ts';
+import { createPopupThemeController } from './theme.ts';
 
 const statusTitle = requireElement<HTMLParagraphElement>('status-title');
 const statusDetail = requireElement<HTMLParagraphElement>('status-detail');
@@ -34,10 +35,17 @@ const removeCredentials = requireElement<HTMLButtonElement>('remove-credentials'
 const googleState = requireElement<HTMLElement>('google-state');
 const connectGoogle = requireElement<HTMLButtonElement>('connect-google');
 const disconnectGoogle = requireElement<HTMLButtonElement>('disconnect-google');
+const themePreference = requireElement<HTMLSelectElement>('theme-preference');
 const PROFILE_STORAGE_KEY = 'bkalendar-next:profiles';
+const themeController = createPopupThemeController(
+	document.documentElement,
+	themePreference,
+	chrome.storage.local
+);
 
 void renderStoredState();
 void renderSettings();
+void themeController.initialize();
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
 	if (areaName !== 'local') return;
@@ -65,6 +73,12 @@ connectGoogle.addEventListener('click', () => {
 
 disconnectGoogle.addEventListener('click', () => {
 	void changeGoogleConnection(false);
+});
+
+themePreference.addEventListener('change', () => {
+	void themeController.update(
+		themePreference.value as Parameters<typeof themeController.update>[0]
+	);
 });
 
 async function renderStoredState(): Promise<void> {

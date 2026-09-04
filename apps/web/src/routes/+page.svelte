@@ -364,4 +364,8 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 
 <footer>
 	<p>BKalendar Next · Local-first · Asia/Ho_Chi_Minh</p>
+	<p>
+		Dev by
+		<a href="https://home.heavietnam.com" target="_blank" rel="noreferrer">Heavn</a>
+	</p>
 </footer>
