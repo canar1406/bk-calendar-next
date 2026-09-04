@@ -6,11 +6,13 @@ import {
 	createSnapshot
 } from '../../../packages/timetable/src/index.ts';
 import {
+	publishCourseAppearanceToExtension,
 	requestPendingSnapshotFromExtension,
 	type ExtensionMessageEvent,
 	type ExtensionMessageWindow,
 	type ExtensionTransferTimers
 } from '../src/lib/extension-handoff.ts';
+import { defaultCourseColorPreferences } from '../src/lib/course-colors.ts';
 
 class FakeWindow implements ExtensionMessageWindow {
 	readonly location: { origin: string; search: string };
@@ -83,6 +85,34 @@ class FakeTimers implements ExtensionTransferTimers {
 }
 
 describe('extension-to-web browser handoff', () => {
+	it('publishes profile-specific course appearance settings to the installed extension', () => {
+		const targetWindow = new FakeWindow('?semester=261');
+		const preferences = {
+			...defaultCourseColorPreferences(),
+			overrides: { MT1003: '5' },
+			icons: { MT1003: '🧮' }
+		};
+
+		publishCourseAppearanceToExtension({
+			targetWindow,
+			profileId: 'student-2024:261',
+			preferences
+		});
+
+		assert.deepEqual(targetWindow.posted, [
+			{
+				message: {
+					source: 'bkalendar-web',
+					type: 'bkalendar:course-appearance',
+					version: 1,
+					profileId: 'student-2024:261',
+					preferences
+				},
+				targetOrigin: 'https://canar1406.github.io'
+			}
+		]);
+	});
+
 	it('does nothing unless the URL explicitly comes from the extension', async () => {
 		const targetWindow = new FakeWindow('?semester=261');
 		const timers = new FakeTimers();

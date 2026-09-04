@@ -27,11 +27,17 @@ function local(stableKey: string, fingerprint: string, location = 'H1'): Managed
 		metadata: {}
 	};
 }
-const remote = (id: string, stableKey: string, fingerprint: string): ManagedGoogleEvent => ({
+const remote = (
+	id: string,
+	stableKey: string,
+	fingerprint: string,
+	overrides: Partial<ManagedGoogleEvent> = {}
+): ManagedGoogleEvent => ({
 	id,
 	etag: `etag-${id}`,
 	stableKey,
-	fingerprint
+	fingerprint,
+	...overrides
 });
 
 function gateway(existing: ManagedGoogleEvent[]) {
@@ -67,6 +73,44 @@ describe('managed Google Calendar reconciliation', () => {
 			},
 			{ inserted: 0, patched: 0, deleted: 0, unchanged: 1 }
 		);
+	});
+
+	it('preserves remote course presentation during an extension check with unchanged source', async () => {
+		const { api, calls } = gateway([
+			remote('event-1', 'MT1003', 'same:color:5:icon:🧮', {
+				sourceFingerprint: 'same',
+				colorId: '5',
+				icon: '🧮'
+			})
+		]);
+
+		const result = await syncManagedCalendar(api, 'calendar-1', [local('MT1003', 'same')]);
+
+		assert.deepEqual(calls, []);
+		assert.equal(result.unchanged, 1);
+	});
+
+	it('inherits course presentation when patching a changed MyBK source', async () => {
+		let patched: ManagedEvent | undefined;
+		const { api } = gateway([
+			remote('event-1', 'MT1003', 'old:color:5:icon:🧮', {
+				sourceFingerprint: 'old',
+				colorId: '5',
+				icon: '🧮'
+			})
+		]);
+		api.patchEvent = async (_calendarId, _eventId, event) => {
+			patched = event;
+			return remote('event-1', event.stableKey, event.fingerprint ?? '');
+		};
+
+		const result = await syncManagedCalendar(api, 'calendar-1', [local('MT1003', 'new')]);
+
+		assert.equal(result.patched, 1);
+		assert.equal(patched?.colorId, '5');
+		assert.equal(patched?.icon, '🧮');
+		assert.equal(patched?.sourceFingerprint, 'new');
+		assert.equal(patched?.fingerprint, 'new:color:5:icon:🧮');
 	});
 
 	it('removes duplicate managed copies while preserving one canonical event', async () => {

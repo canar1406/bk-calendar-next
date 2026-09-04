@@ -10,6 +10,9 @@ export interface ManagedEvent {
 	sessionOrdinal: number;
 	weekday: number;
 	title: string;
+	colorId?: string;
+	icon?: string;
+	sourceFingerprint?: string;
 	location: string;
 	start: string;
 	end: string;
@@ -86,6 +89,14 @@ export async function createEventFingerprint(
 	event: Omit<ManagedEvent, 'fingerprint'> | ManagedEvent
 ): Promise<string> {
 	return await sha256(canonicalStringify({ ...event, fingerprint: undefined }));
+}
+
+export function createPresentationFingerprint(
+	sourceFingerprint: string,
+	colorId = '',
+	icon = ''
+): string {
+	return `${sourceFingerprint}:color:${colorId}:icon:${icon}`;
 }
 
 export async function createSnapshot(

@@ -15,15 +15,24 @@
 		createProfileStore
 	} from '../../../../packages/timetable/src/storage.ts';
 	import ChangeSummary from '$lib/components/ChangeSummary.svelte';
+	import CourseColorPicker from '$lib/components/CourseColorPicker.svelte';
 	import ScheduleBoard from '$lib/components/ScheduleBoard.svelte';
 	import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
 	import {
+		publishCourseAppearanceToExtension,
 		requestPendingSnapshotFromExtension,
 		type ExtensionMessageWindow
 	} from '$lib/extension-handoff.ts';
 	import { loadGoogleIdentity } from '$lib/google-identity.ts';
 	import { syncPendingProfile } from '$lib/google-sync.ts';
 	import { createIcalendarExport, triggerIcalendarDownload } from '$lib/ical-download.ts';
+	import {
+		buildCourseColorAssignments,
+		colorizeEventsForSync,
+		createCourseColorStore,
+		defaultCourseColorPreferences,
+		type CourseColorPreferences
+	} from '$lib/course-colors.ts';
 	import {
 		inferCaptureCompleteness,
 		prepareTimetable,
@@ -54,6 +63,8 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	let googleResult: SyncResult | undefined;
 	let calendarExportMessage = '';
 	let extensionHandoffMessage = '';
+	let courseColorPreferences = defaultCourseColorPreferences();
+	let courseColorAssignments: Record<string, string> = {};
 
 	const googleClientId = env.PUBLIC_GOOGLE_CLIENT_ID?.trim() ?? '';
 
@@ -72,6 +83,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			if (response.status === 'ready') {
 				const store = createProfileStore(createBrowserStorage(window.localStorage));
 				result = await stageTransferredSnapshot(store, response.snapshot);
+				loadCourseAppearance(result);
 				extensionHandoffMessage =
 					'Đã nhận thời khóa biểu từ extension. Hãy xem lại thay đổi trước khi chọn nơi đồng bộ.';
 			} else if (response.status === 'empty') {
@@ -104,6 +116,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 					completeness: inferCaptureCompleteness(source),
 					provenance: 'sample'
 				});
+				loadCourseAppearance(result);
 			} else {
 				const store = createProfileStore(createBrowserStorage(window.localStorage));
 				result = await stageTimetableImport(store, source, {
@@ -111,6 +124,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 					completeness: inferCaptureCompleteness(source),
 					provenance: 'user'
 				});
+				loadCourseAppearance(result);
 			}
 		} catch (error) {
 			errorMessage =
@@ -126,14 +140,55 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		source = sample;
 		sourceIsSample = true;
 		result = undefined;
+		courseColorPreferences = defaultCourseColorPreferences();
+		courseColorAssignments = {};
 		errorMessage = '';
+	}
+
+	function loadCourseAppearance(prepared: Prepared): void {
+		courseColorPreferences =
+			prepared.snapshot.provenance === 'sample'
+				? defaultCourseColorPreferences()
+				: createCourseColorStore(window.localStorage).load(prepared.profileId);
+		courseColorAssignments = buildCourseColorAssignments(
+			prepared.snapshot.events,
+			courseColorPreferences
+		);
+		if (prepared.snapshot.provenance !== 'sample') {
+			publishCourseAppearanceToExtension({
+				targetWindow: window as unknown as ExtensionMessageWindow,
+				profileId: prepared.profileId,
+				preferences: courseColorPreferences
+			});
+		}
+	}
+
+	async function updateCourseAppearance(preferences: CourseColorPreferences): Promise<void> {
+		courseColorPreferences = preferences;
+		if (!result) return;
+		courseColorAssignments = buildCourseColorAssignments(result.snapshot.events, preferences);
+		if (result.snapshot.provenance !== 'sample') {
+			createCourseColorStore(window.localStorage).save(result.profileId, preferences);
+			publishCourseAppearanceToExtension({
+				targetWindow: window as unknown as ExtensionMessageWindow,
+				profileId: result.profileId,
+				preferences
+			});
+			const store = createProfileStore(createBrowserStorage(window.localStorage));
+			result = await stageTransferredSnapshot(store, result.snapshot);
+		}
 	}
 
 	async function downloadIcalendar(): Promise<void> {
 		if (!result || result.snapshot.provenance === 'sample') return;
 		calendarExportMessage = '';
 		const calendarName = `BKalendar • HK ${result.snapshot.semester}`;
-		const file = createIcalendarExport(result.snapshot, calendarName);
+		const events = colorizeEventsForSync(
+			result.snapshot.events,
+			courseColorAssignments,
+			courseColorPreferences.icons
+		);
+		const file = createIcalendarExport({ ...result.snapshot, events }, calendarName);
 		try {
 			const action = await triggerIcalendarDownload(file);
 			calendarExportMessage =
@@ -164,6 +219,8 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 				gateway: new GoogleCalendarRestGateway(accessToken),
 				findCalendars: async (summary) => await findManagedCalendars(fetch, accessToken, summary),
 				createCalendar: async (summary) => await createManagedCalendar(fetch, accessToken, summary),
+				prepareEvents: (events) =>
+					colorizeEventsForSync(events, courseColorAssignments, courseColorPreferences.icons),
 				onProgress(progress) {
 					googleResult = { ...progress, failed: [...progress.failed] };
 				}
@@ -311,7 +368,16 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			<div><span>Profile</span><strong>{result.profileId}</strong></div>
 		</section>
 
-		<ScheduleBoard events={result.snapshot.events} />
+		<ScheduleBoard
+			events={result.snapshot.events}
+			colorAssignments={courseColorAssignments}
+			courseIcons={courseColorPreferences.icons}
+		/>
+		<CourseColorPicker
+			events={result.snapshot.events}
+			preferences={courseColorPreferences}
+			onChange={updateCourseAppearance}
+		/>
 		<ChangeSummary diff={result.diff} />
 
 		<section class="destination" aria-labelledby="destination-title">

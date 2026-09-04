@@ -129,6 +129,48 @@ describe('extension-to-web review bridge', () => {
 		]);
 	});
 
+	it('stores valid course appearance settings posted by the official web app', async () => {
+		const source = {} as MessageEventSource;
+		const writes: Array<{ profileId: string; preferences: unknown }> = [];
+		const preferences = {
+			schemaVersion: 1,
+			mode: 'course',
+			seed: 2,
+			monoColorId: '7',
+			overrides: { MT1003: '5' },
+			icons: { MT1003: '🧮' }
+		};
+
+		const handled = await handleExtensionTransferMessage(
+			{
+				source,
+				origin: REVIEW_ORIGIN,
+				data: {
+					source: 'bkalendar-web',
+					type: 'bkalendar:course-appearance',
+					version: 1,
+					profileId: 'student-2024:261',
+					preferences
+				}
+			},
+			{
+				windowSource: source,
+				origin: REVIEW_ORIGIN,
+				pathname: REVIEW_PATH_PREFIX,
+				async readProfiles() {
+					throw new Error('course appearance transfer must not read timetable profiles');
+				},
+				async writeCourseAppearance(profileId, value) {
+					writes.push({ profileId, preferences: value });
+				},
+				postResponse() {}
+			}
+		);
+
+		assert.equal(handled, true);
+		assert.deepEqual(writes, [{ profileId: 'student-2024:261', preferences }]);
+	});
+
 	it('ignores requests from another window, origin, path, or invalid protocol envelope', async () => {
 		const source = {} as MessageEventSource;
 		const otherSource = {} as MessageEventSource;

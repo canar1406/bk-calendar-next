@@ -5,6 +5,7 @@ const WEEK_IN_MILLISECONDS = 7 * 24 * 60 * 60 * 1_000;
 interface CalendarEvent {
 	readonly stableKey: string;
 	readonly title: string;
+	readonly icon?: string;
 	readonly location: string;
 	readonly start: string;
 	readonly end: string;
@@ -52,7 +53,7 @@ function eventLines(event: CalendarEvent, generatedAt: Date): string[] {
 		`DTSTART;TZID=${event.timeZone}:${formatZonedDateTime(event.start, event.timeZone)}`,
 		`DTEND;TZID=${event.timeZone}:${formatZonedDateTime(event.end, event.timeZone)}`,
 		...recurrenceLines(event),
-		`SUMMARY:${escapeText(event.title)}`,
+		`SUMMARY:${escapeText(event.icon ? `${event.icon} ${event.title}` : event.title)}`,
 		`LOCATION:${escapeText(event.location)}`
 	];
 	const description = formatMetadata(event.metadata);

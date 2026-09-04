@@ -37,8 +37,13 @@ function response(body: unknown, status = 200): Response {
 
 describe('Google Calendar REST payload', () => {
 	it('marks events and emits recurring master data', () => {
-		const resource = toGoogleEventResource(managedEvent);
-		assert.equal(resource.summary, 'Giải tích 1');
+		const resource = toGoogleEventResource({
+			...managedEvent,
+			colorId: '5',
+			icon: '🧮',
+			sourceFingerprint: 'source-fingerprint'
+		});
+		assert.equal(resource.summary, '🧮 Giải tích 1');
 		assert.deepEqual(resource.start, {
 			dateTime: managedEvent.start,
 			timeZone: 'Asia/Ho_Chi_Minh'
@@ -47,8 +52,11 @@ describe('Google Calendar REST payload', () => {
 			managedBy: MANAGED_BY,
 			schemaVersion: '1',
 			stableKey: 'bk2_abc123',
-			fingerprint: 'fingerprint-1'
+			fingerprint: 'fingerprint-1',
+			sourceFingerprint: 'source-fingerprint',
+			courseIcon: '🧮'
 		});
+		assert.equal(resource.colorId, '5');
 		assert.ok(resource.recurrence?.some((line) => line.startsWith('RRULE:FREQ=WEEKLY;')));
 		assert.ok(resource.recurrence?.includes('EXDATE;TZID=Asia/Ho_Chi_Minh:20260831T070000'));
 	});

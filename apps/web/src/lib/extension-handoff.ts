@@ -3,6 +3,10 @@ import {
 	isExtensionTransferResponse,
 	type TimetableSnapshot
 } from '../../../../packages/timetable/src/index.ts';
+import {
+	createCourseAppearanceTransferMessage,
+	type CourseColorPreferences
+} from '../../../../packages/google-calendar/src/course-appearance.ts';
 
 export interface ExtensionMessageEvent {
 	data: unknown;
@@ -39,8 +43,25 @@ export interface PendingSnapshotRequestOptions {
 	timeoutMs?: number;
 }
 
+export interface PublishCourseAppearanceOptions {
+	targetWindow: Pick<ExtensionMessageWindow, 'location' | 'postMessage'>;
+	profileId: string;
+	preferences: CourseColorPreferences;
+}
+
 const DEFAULT_RETRY_INTERVAL_MS = 150;
 const DEFAULT_TIMEOUT_MS = 900;
+
+export function publishCourseAppearanceToExtension({
+	targetWindow,
+	profileId,
+	preferences
+}: PublishCourseAppearanceOptions): void {
+	targetWindow.postMessage(
+		createCourseAppearanceTransferMessage(profileId, preferences),
+		targetWindow.location.origin
+	);
+}
 
 export async function requestPendingSnapshotFromExtension({
 	targetWindow,

@@ -31,7 +31,7 @@ export interface GoogleCalendarResource {
 
 export function toGoogleEventResource(event: ManagedEvent): GoogleEventResource {
 	return {
-		summary: event.title,
+		summary: event.icon ? `${event.icon} ${event.title}` : event.title,
 		description: Object.entries(event.metadata)
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([key, value]) => `${key}: ${value}`)
@@ -40,12 +40,15 @@ export function toGoogleEventResource(event: ManagedEvent): GoogleEventResource 
 		start: { dateTime: event.start, timeZone: event.timeZone },
 		end: { dateTime: event.end, timeZone: event.timeZone },
 		recurrence: recurrenceLines(event),
+		...(event.colorId ? { colorId: event.colorId } : {}),
 		extendedProperties: {
 			private: {
 				managedBy: MANAGED_BY,
 				schemaVersion: '1',
 				stableKey: event.stableKey,
-				fingerprint: event.fingerprint ?? ''
+				fingerprint: event.fingerprint ?? '',
+				sourceFingerprint: event.sourceFingerprint ?? event.fingerprint ?? '',
+				courseIcon: event.icon ?? ''
 			}
 		}
 	};
@@ -145,7 +148,12 @@ export class GoogleCalendarRestGateway implements GoogleCalendarGateway {
 					id: item.id,
 					...(item.etag ? { etag: item.etag } : {}),
 					stableKey: privateData.stableKey,
-					fingerprint: privateData.fingerprint
+					fingerprint: privateData.fingerprint,
+					...(privateData.sourceFingerprint
+						? { sourceFingerprint: privateData.sourceFingerprint }
+						: {}),
+					...(item.colorId ? { colorId: item.colorId } : {}),
+					...(privateData.courseIcon ? { icon: privateData.courseIcon } : {})
 				});
 			}
 			pageToken = response.nextPageToken;
@@ -236,7 +244,16 @@ function asManaged(resource: GoogleEventResource, fallback: ManagedEvent): Manag
 		id: resource.id,
 		...(resource.etag ? { etag: resource.etag } : {}),
 		stableKey: metadata?.stableKey ?? fallback.stableKey,
-		fingerprint: metadata?.fingerprint ?? fallback.fingerprint ?? ''
+		fingerprint: metadata?.fingerprint ?? fallback.fingerprint ?? '',
+		...(metadata?.sourceFingerprint || fallback.sourceFingerprint
+			? { sourceFingerprint: metadata?.sourceFingerprint ?? fallback.sourceFingerprint }
+			: {}),
+		...(resource.colorId || fallback.colorId
+			? { colorId: resource.colorId ?? fallback.colorId }
+			: {}),
+		...(metadata?.courseIcon || fallback.icon
+			? { icon: metadata?.courseIcon ?? fallback.icon }
+			: {})
 	};
 }
 

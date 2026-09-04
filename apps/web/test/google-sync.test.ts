@@ -109,6 +109,110 @@ describe('Google profile sync workflow', () => {
 		assert.equal(stored?.lastSyncedAt, '2026-09-02T01:00:00.000Z');
 	});
 
+	it('applies presentation colors and icons only to Google payload events', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = await snapshot([event], {
+			state: 'complete',
+			parsedRows: 1,
+			expectedRows: 1
+		});
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			pendingSnapshot: pending
+		});
+		let inserted: ManagedEvent | undefined;
+
+		await syncPendingProfile(store, 'student-2024:261', {
+			gateway: {
+				...emptyGateway(),
+				async insertEvent(_calendarId, localEvent) {
+					inserted = localEvent;
+					return remote(localEvent);
+				}
+			},
+			prepareEvents(events) {
+				return events.map((item) => ({
+					...item,
+					colorId: '5',
+					icon: '🧮',
+					sourceFingerprint: item.fingerprint ?? '',
+					fingerprint: `${item.fingerprint}:color:5:icon:🧮`
+				}));
+			},
+			async createCalendar() {
+				return { id: 'calendar-id' };
+			}
+		});
+
+		assert.equal(inserted?.title, 'Giải tích 1');
+		assert.equal(inserted?.icon, '🧮');
+		assert.equal(inserted?.colorId, '5');
+		assert.equal(
+			(await store.get('student-2024:261'))?.acceptedSnapshot?.events[0]?.title,
+			'Giải tích 1'
+		);
+	});
+
+	it('patches presentation changes even when the source timetable itself is unchanged', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const accepted = await snapshot([event], {
+			state: 'complete',
+			parsedRows: 1,
+			expectedRows: 1
+		});
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			calendarId: 'calendar-id',
+			acceptedSnapshot: accepted,
+			pendingSnapshot: accepted
+		});
+		let patched: ManagedEvent | undefined;
+
+		const synced = await syncPendingProfile(store, 'student-2024:261', {
+			gateway: {
+				...emptyGateway(),
+				async listManagedEvents() {
+					return [
+						{
+							id: 'remote-event',
+							stableKey: event.stableKey,
+							fingerprint: `${event.fingerprint}:color:7:icon:`
+						}
+					];
+				},
+				async patchEvent(_calendarId, _eventId, localEvent) {
+					patched = localEvent;
+					return remote(localEvent);
+				}
+			},
+			prepareEvents(events) {
+				return events.map((item) => ({
+					...item,
+					colorId: '5',
+					icon: '🧮',
+					sourceFingerprint: item.fingerprint ?? '',
+					fingerprint: `${item.fingerprint}:color:5:icon:🧮`
+				}));
+			},
+			async createCalendar() {
+				throw new Error('must reuse the stored calendar');
+			}
+		});
+
+		assert.equal(synced.result.patched, 1);
+		assert.equal(patched?.colorId, '5');
+		assert.equal(patched?.icon, '🧮');
+		assert.equal(patched?.title, 'Giải tích 1');
+	});
+
 	it('reuses an existing managed semester calendar instead of creating a duplicate', async () => {
 		const store = createProfileStore(new MemoryStorage());
 		const pending = await snapshot([event], {

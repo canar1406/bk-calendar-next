@@ -5,8 +5,11 @@
 		selectDefaultScheduleWeek,
 		type ScheduleWeek
 	} from '../schedule-view.ts';
+	import { colorForId, courseIdentity } from '../course-colors.ts';
 
 	export let events: ManagedEvent[] = [];
+	export let colorAssignments: Record<string, string> = {};
+	export let courseIcons: Record<string, string> = {};
 
 	const calendarTimeZone = 'Asia/Ho_Chi_Minh';
 	const days = [
@@ -50,6 +53,14 @@
 
 	function timeRange(event: ManagedEvent): string {
 		return `${timeFormatter.format(new Date(event.start))}–${timeFormatter.format(new Date(event.end))}`;
+	}
+
+	function eventColor(event: ManagedEvent): string {
+		return colorForId(colorAssignments[courseIdentity(event)] ?? '7').background;
+	}
+
+	function eventIcon(event: ManagedEvent): string {
+		return courseIcons[courseIdentity(event)] ?? '';
 	}
 
 	function showPreviousWeek(): void {
@@ -148,9 +159,12 @@
 				<header><span>{day.short}</span><small>{day.label}</small></header>
 				<div class="day-events">
 					{#each visibleEvents.filter((event) => event.weekday === day.weekday) as event}
-						<article class="event-card">
+						<article
+							class="event-card"
+							style={`--course-color: ${eventColor(event)}; --course-tint: color-mix(in srgb, ${eventColor(event)} 10%, var(--surface-raised));`}
+						>
 							<p class="event-time">{timeRange(event)}</p>
-							<h3>{event.title}</h3>
+							<h3>{eventIcon(event) ? `${eventIcon(event)} ` : ''}{event.title}</h3>
 							<p class="event-code">{event.courseCode} · {event.group}</p>
 							<p class="event-room">{event.location || 'Chưa có phòng'}</p>
 						</article>

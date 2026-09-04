@@ -720,13 +720,13 @@ html[data-theme='dark'] .safety-note {
 
 .event-card {
 	padding: 12px;
-	background: var(--surface);
-	border-left: 3px solid var(--cyan);
+	background: var(--course-tint, var(--surface));
+	border-left: 3px solid var(--course-color, var(--cyan));
 	box-shadow: 0 4px 14px rgba(16, 42, 67, 0.08);
 }
 
 html[data-theme='dark'] .event-card {
-	background: var(--surface-raised);
+	background: var(--course-tint, var(--surface-raised));
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 

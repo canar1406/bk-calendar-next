@@ -30,6 +30,8 @@ import {
 	type TrackingNotificationKind
 } from './tracking-notification.ts';
 import { LAST_DIFF_STORAGE_KEY, createDiffLog } from '../shared/diff-log.ts';
+import { courseColorStorageKey } from '../../../../packages/google-calendar/src/course-appearance.ts';
+import { prepareEventsWithCourseAppearance } from '../shared/course-appearance.ts';
 
 const TRACKING_ALARM = 'bkalendar-next:track-mybk';
 const TRACKING_MODE_KEY = 'bkalendar-next:tracking-mode';
@@ -215,10 +217,14 @@ async function processCapture(
 	}
 
 	const accessToken = await requestGoogleToken(chrome.identity, false, GOOGLE_WEB_CLIENT_ID);
+	const appearanceKey = courseColorStorageKey(staged.profileId);
+	const storedAppearance = await chrome.storage.local.get(appearanceKey);
 	const synced = await syncPendingProfile(store, staged.profileId, {
 		gateway: new GoogleCalendarRestGateway(accessToken),
 		findCalendars: async (summary) => await findManagedCalendars(fetch, accessToken, summary),
-		createCalendar: async (summary) => await createManagedCalendar(fetch, accessToken, summary)
+		createCalendar: async (summary) => await createManagedCalendar(fetch, accessToken, summary),
+		prepareEvents: (events) =>
+			prepareEventsWithCourseAppearance(events, storedAppearance[appearanceKey])
 	});
 	if (synced.result.failed.length > 0 || !synced.promoted) {
 		throw new Error('Google Calendar chưa áp dụng đầy đủ thay đổi.');

@@ -36,6 +36,17 @@ const options = {
 };
 
 describe('iCalendar formatter', () => {
+	it('prefixes a configured course icon in exported event titles', () => {
+		const output = formatIcalendar(
+			{
+				events: [{ ...event, icon: '🧮' }]
+			},
+			{ calendarName: 'BKalendar', generatedAt: new Date('2026-09-01T00:00:00.000Z') }
+		);
+
+		assert.match(output, /SUMMARY:🧮 Giải tích 1/);
+	});
+
 	it('uses deterministic UID and escapes RFC 5545 text', () => {
 		const first = formatIcalendar(snapshot, options);
 		const second = formatIcalendar(snapshot, {

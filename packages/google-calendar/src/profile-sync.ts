@@ -1,11 +1,12 @@
 import { syncManagedCalendar, type GoogleCalendarGateway, type SyncResult } from './index.ts';
-import { diffSnapshots, type TimetableDiff } from '../../timetable/src/index.ts';
+import { diffSnapshots, type ManagedEvent, type TimetableDiff } from '../../timetable/src/index.ts';
 import type { ProfileStore, SyncProfile } from '../../timetable/src/storage.ts';
 
 export interface GoogleSyncDependencies {
 	gateway: GoogleCalendarGateway;
 	findCalendars?(summary: string): Promise<Array<{ id: string }>>;
 	createCalendar(summary: string): Promise<{ id: string }>;
+	prepareEvents?(events: ManagedEvent[]): ManagedEvent[];
 	now?: () => string;
 	onProgress?: (result: Readonly<SyncResult>) => void;
 }
@@ -50,15 +51,13 @@ export async function syncPendingProfile(
 	}
 
 	const diff = diffSnapshots(profile.acceptedSnapshot, pendingSnapshot);
-	const result = await syncManagedCalendar(
-		dependencies.gateway,
-		calendarId,
-		pendingSnapshot.events,
-		{
-			allowDeletes: diff.canDelete,
-			...(dependencies.onProgress ? { onProgress: dependencies.onProgress } : {})
-		}
-	);
+	const eventsForSync = dependencies.prepareEvents
+		? dependencies.prepareEvents(pendingSnapshot.events)
+		: pendingSnapshot.events;
+	const result = await syncManagedCalendar(dependencies.gateway, calendarId, eventsForSync, {
+		allowDeletes: diff.canDelete,
+		...(dependencies.onProgress ? { onProgress: dependencies.onProgress } : {})
+	});
 	const promoted = result.failed.length === 0 && result.skippedDeletes === 0;
 
 	if (promoted) {

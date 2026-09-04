@@ -66,9 +66,27 @@ Load the generated `apps/extension/dist` directory as an unpacked extension:
 - Edge: open `edge://extensions`, enable Developer mode, then choose
   **Load unpacked**.
 
-The extension requests only local storage and the specific MyBK timetable
-page. It detects and reviews changes locally; it does not silently write to
-Google Calendar.
+The extension requests only local storage, Google Calendar, and the specific
+MyBK/CAS pages needed for background tracking. In review mode it stages changes
+for approval. In automatic mode it updates only the dedicated calendar created
+by BKalendar and never writes to the user's primary/personal calendar.
+
+### Course color and icon settings
+
+Course appearance is configured on the BKalendar web page. When the official
+web page is open and the extension is installed, each saved profile's color
+mode, palette, per-course overrides, and icons are copied directly into
+`chrome.storage.local`. The next automatic MyBK sync reads that local setting
+before creating or patching Google Calendar events.
+
+There is intentionally no hidden downloaded config file. Chrome and Edge do
+not allow an extension to silently search arbitrary files on the user's
+computer, and doing so would require broader filesystem permissions. The
+web-to-extension handoff stays inside the browser, is accepted only from
+`https://canar1406.github.io/bk-calendar-next/`, is validated before storage,
+and is never uploaded to a BKalendar server. Users can change the settings on
+the web page again at any time; opening the matching timetable profile copies
+the newest settings to the extension automatically.
 
 Create one ZIP compatible with both Chrome and Edge:
 

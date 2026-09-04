@@ -5,6 +5,11 @@ import {
 	type ExtensionTransferResponse,
 	type TimetableSnapshot
 } from '../../../../packages/timetable/src/index.ts';
+import {
+	courseColorStorageKey,
+	isCourseAppearanceTransferMessage,
+	type CourseColorPreferences
+} from '../../../../packages/google-calendar/src/course-appearance.ts';
 
 export const PROFILE_STORAGE_KEY = 'bkalendar-next:profiles';
 export const REVIEW_ORIGIN = 'https://canar1406.github.io';
@@ -21,6 +26,7 @@ interface TransferContext {
 	origin: string;
 	pathname: string;
 	readProfiles(): Promise<unknown>;
+	writeCourseAppearance?(profileId: string, preferences: CourseColorPreferences): Promise<void>;
 	postResponse(response: ExtensionTransferResponse): void;
 }
 
@@ -32,11 +38,17 @@ export async function handleExtensionTransferMessage(
 		event.source !== context.windowSource ||
 		event.origin !== REVIEW_ORIGIN ||
 		context.origin !== REVIEW_ORIGIN ||
-		!context.pathname.startsWith(REVIEW_PATH_PREFIX) ||
-		!isExtensionTransferRequest(event.data)
+		!context.pathname.startsWith(REVIEW_PATH_PREFIX)
 	) {
 		return false;
 	}
+
+	if (isCourseAppearanceTransferMessage(event.data)) {
+		if (!context.writeCourseAppearance) return false;
+		await context.writeCourseAppearance(event.data.profileId, event.data.preferences);
+		return true;
+	}
+	if (!isExtensionTransferRequest(event.data)) return false;
 
 	const snapshot = selectNewestPendingSnapshot(await context.readProfiles());
 	context.postResponse(
@@ -72,6 +84,11 @@ if (typeof window !== 'undefined' && typeof chrome !== 'undefined') {
 			async readProfiles() {
 				const stored = await chrome.storage.local.get(PROFILE_STORAGE_KEY);
 				return stored[PROFILE_STORAGE_KEY];
+			},
+			async writeCourseAppearance(profileId, preferences) {
+				await chrome.storage.local.set({
+					[courseColorStorageKey(profileId)]: preferences
+				});
 			},
 			postResponse(response) {
 				window.postMessage(response, REVIEW_ORIGIN);

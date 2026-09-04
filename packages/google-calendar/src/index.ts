@@ -1,10 +1,13 @@
-import type { ManagedEvent } from '../../timetable/src/index.ts';
+import { createPresentationFingerprint, type ManagedEvent } from '../../timetable/src/index.ts';
 
 export interface ManagedGoogleEvent {
 	id: string;
 	etag?: string;
 	stableKey: string;
 	fingerprint: string;
+	sourceFingerprint?: string;
+	colorId?: string;
+	icon?: string;
 }
 
 export interface GoogleCalendarGateway {
@@ -86,7 +89,8 @@ export async function syncManagedCalendar(
 
 	for (const event of existing) {
 		const remote = remoteByKey.get(event.stableKey)!;
-		if (remote.fingerprint === event.fingerprint) {
+		const eventForSync = inheritRemotePresentation(event, remote);
+		if (remote.fingerprint === eventForSync.fingerprint) {
 			result.unchanged++;
 			options.onProgress?.(result);
 			continue;
@@ -97,7 +101,7 @@ export async function syncManagedCalendar(
 			event.stableKey,
 			remote.id,
 			async () => {
-				await gateway.patchEvent(calendarId, remote.id, event, remote.etag);
+				await gateway.patchEvent(calendarId, remote.id, eventForSync, remote.etag);
 				result.patched++;
 			},
 			options.onProgress
@@ -123,6 +127,21 @@ export async function syncManagedCalendar(
 	}
 
 	return result;
+}
+
+function inheritRemotePresentation(event: ManagedEvent, remote: ManagedGoogleEvent): ManagedEvent {
+	if (event.sourceFingerprint !== undefined || remote.sourceFingerprint === undefined) return event;
+	const sourceFingerprint = event.fingerprint ?? '';
+	const colorId = remote.colorId ?? '';
+	const icon = remote.icon ?? '';
+	if (!colorId && !icon) return event;
+	return {
+		...event,
+		...(colorId ? { colorId } : {}),
+		...(icon ? { icon } : {}),
+		sourceFingerprint,
+		fingerprint: createPresentationFingerprint(sourceFingerprint, colorId, icon)
+	};
 }
 
 async function execute(
@@ -172,6 +191,31 @@ export {
 	type GoogleTokenClient,
 	type GoogleTokenResponse
 } from './oauth.ts';
+export {
+	COURSE_APPEARANCE_TRANSFER_TYPE,
+	COURSE_APPEARANCE_TRANSFER_VERSION,
+	COURSE_COLOR_PALETTES,
+	COURSE_ICONS,
+	GOOGLE_EVENT_COLORS,
+	buildCourseColorAssignments,
+	colorForId,
+	colorizeEventsForSync,
+	courseColorStorageKey,
+	courseIdentity,
+	createCourseAppearanceTransferMessage,
+	createCourseColorStore,
+	defaultCourseColorPreferences,
+	isCourseAppearanceTransferMessage,
+	isCourseColorPreferences,
+	normalizeCourseColorPreferences,
+	type CourseAppearanceTransferMessage,
+	type CourseColorMode,
+	type CourseColorPalette,
+	type CourseColorPreferences,
+	type CourseColorStorage,
+	type CourseIcon,
+	type GoogleEventColor
+} from './course-appearance.ts';
 export {
 	GoogleCalendarApiError,
 	GoogleCalendarRestGateway,
