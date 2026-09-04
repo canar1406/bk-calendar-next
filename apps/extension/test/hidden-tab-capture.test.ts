@@ -195,6 +195,64 @@ describe('hidden MyBK tab capture', () => {
 		await pending;
 	});
 
+	it('supports a configured non-MyBK source URL and submits its native login form in the background', async () => {
+		const calls: string[] = [];
+		const fake = createFakeApi(calls);
+		let resolveCapture!: (capture: ReturnType<typeof completeCapture>) => void;
+		let submitted = 0;
+		const pending = captureInHiddenTab({
+			api: fake.api,
+			url: 'https://tkb.hcmut.edu.vn/',
+			sourceKind: 'lecturer',
+			credentials: { username: 'lecturer', password: 'secret' },
+			waitForCapture: () =>
+				new Promise((resolve) => {
+					resolveCapture = resolve;
+				}),
+			submitCredentials: async () => {
+				submitted += 1;
+				return true;
+			}
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await fake.emit('https://tkb.hcmut.edu.vn/login');
+		assert.equal(submitted, 1);
+		resolveCapture(completeCapture());
+		await pending;
+	});
+
+	it('restarts CAS authentication when the TKB URL returns an expired-session page', async () => {
+		const calls: string[] = [];
+		const fake = createFakeApi(calls);
+		let resolveCapture!: (capture: ReturnType<typeof completeCapture>) => void;
+		let sessionExpired!: (reason?: string) => Promise<void>;
+		const pending = captureInHiddenTab({
+			api: fake.api,
+			url: MYBK_TIMETABLE_URL,
+			credentials: { username: 'student', password: 'secret' },
+			waitForCapture: (tabId) =>
+				new Promise((resolve) => {
+					resolveCapture = resolve;
+				}),
+			registerSessionExpired: (tabId, handler) => {
+				calls.push(`session-handler:${tabId}`);
+				sessionExpired = handler;
+				return () => calls.push('session-handler:remove');
+			},
+			submitCredentials: async () => true
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await fake.emit(MYBK_TIMETABLE_URL);
+		assert.ok(calls.includes(`session-handler:42`));
+		await sessionExpired('Phiên đăng nhập đã hết hạn');
+		assert.ok(calls.includes(`update:42:${HCMUT_CAS_RENEW_URL}`));
+
+		resolveCapture(completeCapture());
+		await pending;
+	});
+
 	it('closes the inactive tab and removes its listener when capture fails', async () => {
 		const calls: string[] = [];
 		const fake = createFakeApi(calls);

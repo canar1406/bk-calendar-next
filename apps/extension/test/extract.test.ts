@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { extractMyBkTableFromDocument } from '../src/content/extract.ts';
+import {
+	extractMyBkTableFromDocument,
+	extractTimetableFromDocument,
+	isLikelyExpiredSession
+} from '../src/content/extract.ts';
+import { parseTimetableSource } from '../../../packages/core/src/index.ts';
 
 const html = `
 <h3>20261 - Học kỳ 1 Năm học 2026 - 2027(Hiện hành)</h3>
@@ -43,5 +48,45 @@ describe('MyBK DOM extractor', () => {
 			() => extractMyBkTableFromDocument('<p>Phiên đăng nhập đã hết hạn</p>'),
 			/không tìm thấy bảng thời khóa biểu/i
 		);
+	});
+
+	it('recognizes an expired MyBK session even when the browser URL is still the TKB URL', () => {
+		assert.equal(
+			isLikelyExpiredSession(`
+				<div class="alert">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</div>
+				<a href="/app/login?type=cas">Đăng nhập</a>
+			`),
+			true
+		);
+		assert.equal(
+			isLikelyExpiredSession('<div>Học kỳ hiện tại</div><table><tr><td>TKB</td></tr></table>'),
+			false
+		);
+	});
+
+	it('extracts legacy student, lecturer, and postgraduate tables for background tracking', () => {
+		const legacy = extractTimetableFromDocument(`
+			<h3>Học kỳ 1 Năm học 2020 - 2021</h3>
+			<table><tr><th>MÃ MH</th><th>TÊN MÔN HỌC</th><th>TÍN CHỈ</th><th>TC HỌC PHÍ</th><th>NHÓM-TỔ</th><th>THỨ</th><th>TIẾT</th><th>GIỜ HỌC</th><th>PHÒNG</th><th>CƠ SỞ</th><th>TUẦN HỌC</th></tr>
+			<tr><td>MT1003</td><td>Giải tích 1</td><td>4</td><td>4</td><td>L25</td><td>3</td><td>2-4</td><td>7:00 - 9:50</td><td>H1-304</td><td>BK-DAn</td><td>--|42|43|</td></tr></table>`);
+		const lecturer = extractTimetableFromDocument(`
+			<p>Năm học 2022 · Học kỳ 1</p>
+			<table><tr><th>Lớp</th><th>Tên MH</th><th>Phòng</th><th>Dãy</th><th>Thứ</th><th>Số tiết</th><th>Tiết</th><th>Giờ</th><th>Tuần học</th><th>% ND</th></tr>
+			<tr><td>20221_CO1006_L11</td><td>Nhập môn điện toán</td><td>H6-707</td><td>H6</td><td>5</td><td>5</td><td>7-11</td><td>12:00 - 16:50</td><td>--|43|</td><td>0%</td></tr></table>
+			<p>Đang xem 1 đến 1 trong tổng số 1 mục</p>`);
+		const postgraduate = extractTimetableFromDocument(`
+			<p>Học kỳ 1/2023-2024: 04/09/2023 (Tuần 1)</p>
+			<table><tr><th>Cán bộ giảng dạy</th><th>Môn học</th><th>Lớp/DS lớp</th><th>Thứ</th><th>Tiết bắt đầu</th><th>Tiết kết thúc</th><th>Phòng</th><th>Tuần</th><th>Ghi chú</th></tr>
+			<tr><td>GS.TS Phan Thị Tươi</td><td>(CO5143) - Xử lý ngôn ngữ tự nhiên</td><td>1 /</td><td>CN</td><td>4</td><td>6</td><td>Trực tuyến</td><td>|1|2|</td><td>Học trực tuyến</td></tr></table>`);
+
+		assert.equal(legacy.sourceKind, 'student-legacy');
+		assert.match(legacy.raw, /MT1003\tGiải tích 1/);
+		assert.equal(parseTimetableSource(legacy.raw, 'student-legacy').timetable.rows.length, 1);
+		assert.equal(lecturer.sourceKind, 'lecturer');
+		assert.match(lecturer.raw, /20221_CO1006_L11\tNhập môn điện toán/);
+		assert.equal(lecturer.completeness.state, 'complete');
+		assert.equal(postgraduate.sourceKind, 'postgraduate');
+		assert.match(postgraduate.raw, /CO5143/);
+		assert.equal(parseTimetableSource(postgraduate.raw, 'postgraduate').timetable.rows.length, 1);
 	});
 });

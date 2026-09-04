@@ -3,12 +3,15 @@ import type { TrackingMode } from '../background/tracking-policy.ts';
 import {
 	diffSnapshots,
 	type ManagedEvent,
+	type SourceKind,
 	type TimetableSnapshot
 } from '../../../../packages/timetable/src/index.ts';
 import { readStoredDiffLog, type DiffDetail } from '../shared/diff-log.ts';
+import { isSourceKind, sourceDisplayName, supportsBackgroundTracking } from './source-selection.ts';
 
 export interface StoredProfileSummary {
 	profileId: string;
+	sourceKind: SourceKind;
 	semester: number;
 	calendarName: string;
 	lastCheckedAt?: string;
@@ -37,9 +40,12 @@ export interface PopupViewModel {
 export const WEB_REVIEW_URL = 'https://canar1406.github.io/bk-calendar-next/?from=extension';
 
 export function selectCurrentProfile(
-	profiles: StoredProfileSummary[]
+	profiles: StoredProfileSummary[],
+	sourceKind?: SourceKind
 ): StoredProfileSummary | undefined {
-	return [...profiles].sort((a, b) => timestamp(b.lastCheckedAt) - timestamp(a.lastCheckedAt))[0];
+	return profiles
+		.filter((profile) => sourceKind === undefined || profile.sourceKind === sourceKind)
+		.sort((a, b) => timestamp(b.lastCheckedAt) - timestamp(a.lastCheckedAt))[0];
 }
 
 export function buildPopupViewModel(
@@ -47,9 +53,34 @@ export function buildPopupViewModel(
 	profile?: StoredProfileSummary,
 	configured?: boolean,
 	trackingMode?: TrackingMode,
-	googleConnected?: boolean
+	googleConnected?: boolean,
+	sourceKind: SourceKind = 'student-2024'
 ): PopupViewModel {
 	const emptyCounts = { added: 0, changed: 0, removed: 0 };
+
+	if (!supportsBackgroundTracking(sourceKind)) {
+		const sourceName = sourceDisplayName(sourceKind);
+		return {
+			tone: profile ? 'complete' : 'idle',
+			title: profile ? `Đã nhận lịch ${sourceName}` : `Chưa có lịch ${sourceName}`,
+			detail: profile
+				? 'Hồ sơ này đã được đồng bộ cục bộ từ BKalendar Web. Extension chỉ hiển thị đúng nguồn đã chọn và không giả vờ tự theo dõi trang chưa được hỗ trợ.'
+				: 'Hãy nhập lịch trên BKalendar Web; hồ sơ, màu và icon sẽ được chuyển sang extension qua kết nối cục bộ.',
+			...(profile
+				? {
+						profileLabel: `Học kỳ ${profile.semester} · ${profile.pendingEventCount} buổi học`,
+						...(profile.lastCheckedAt
+							? { capturedLabel: formatDateTime(profile.lastCheckedAt) }
+							: {})
+					}
+				: {}),
+			counts: emptyCounts,
+			deletionBlocked: false,
+			actionLabel: profile ? 'Xem lịch trên BKalendar Web' : 'Mở BKalendar Web để nhập lịch',
+			actionKind: 'open-web-review',
+			actionUrl: WEB_REVIEW_URL
+		};
+	}
 
 	if (configured === false) {
 		return {
@@ -157,6 +188,7 @@ export function summarizeStoredProfiles(value: unknown): StoredProfileSummary[] 
 		if (
 			typeof profile.profileId !== 'string' ||
 			typeof profile.semester !== 'number' ||
+			!isSourceKind(profile.sourceKind) ||
 			typeof profile.calendarName !== 'string'
 		) {
 			return [];
@@ -172,6 +204,7 @@ export function summarizeStoredProfiles(value: unknown): StoredProfileSummary[] 
 		return [
 			{
 				profileId: profile.profileId,
+				sourceKind: profile.sourceKind,
 				semester: profile.semester,
 				calendarName: profile.calendarName,
 				...(typeof profile.lastCheckedAt === 'string'
@@ -185,10 +218,19 @@ export function summarizeStoredProfiles(value: unknown): StoredProfileSummary[] 
 	});
 }
 
-export function buildStoredDiffDetails(value: unknown, lastDiff?: unknown): DiffDetail[] {
+export function buildStoredDiffDetails(
+	value: unknown,
+	lastDiff?: unknown,
+	sourceKind?: SourceKind
+): DiffDetail[] {
 	const storedLog = readStoredDiffLog(lastDiff);
-	if (storedLog?.details.length) return storedLog.details;
-	const profile = selectNewestProfileWithPendingSnapshot(value);
+	if (
+		storedLog?.details.length &&
+		(sourceKind === undefined || storedLog.profileId.startsWith(`${sourceKind}:`))
+	) {
+		return storedLog.details;
+	}
+	const profile = selectNewestProfileWithPendingSnapshot(value, sourceKind);
 	if (!profile) return [];
 	try {
 		const diff = diffSnapshots(profile.acceptedSnapshot, profile.pendingSnapshot);
@@ -217,8 +259,28 @@ export function buildStoredDiffDetails(value: unknown, lastDiff?: unknown): Diff
 	}
 }
 
+export function buildFallbackDiffDetails(status: ExtensionStatus): DiffDetail[] {
+	if (status.state !== 'captured' || status.syncState !== 'applied' || !status.changes) return [];
+	const { added, changed, removed } = status.changes;
+	const total = added + changed + removed;
+	if (total === 0) return [];
+	const operations = [
+		added > 0 ? `${added} buổi thêm mới` : '',
+		changed > 0 ? `${changed} buổi thay đổi` : '',
+		removed > 0 ? `${removed} buổi đã xóa` : ''
+	].filter(Boolean);
+	return [
+		{
+			kind: 'changed',
+			title: 'Google Calendar',
+			description: `Đã tự động cập nhật ${operations.join(', ')}. Chi tiết từng buổi không còn trong log cục bộ.`
+		}
+	];
+}
+
 function selectNewestProfileWithPendingSnapshot(
-	value: unknown
+	value: unknown,
+	sourceKind?: SourceKind
 ): { acceptedSnapshot?: TimetableSnapshot; pendingSnapshot: TimetableSnapshot } | undefined {
 	if (!Array.isArray(value)) return undefined;
 	return value
@@ -226,6 +288,7 @@ function selectNewestProfileWithPendingSnapshot(
 			if (!item || typeof item !== 'object') return [];
 			const profile = item as Record<string, unknown>;
 			if (!isSnapshot(profile.pendingSnapshot)) return [];
+			if (sourceKind !== undefined && profile.pendingSnapshot.sourceKind !== sourceKind) return [];
 			return [
 				{
 					...(isSnapshot(profile.acceptedSnapshot)

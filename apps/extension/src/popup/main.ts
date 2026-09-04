@@ -2,6 +2,7 @@ import './style.css';
 import { EXTENSION_STATUS_KEY, type ExtensionStatus } from '../background/status.ts';
 import {
 	buildStoredDiffDetails,
+	buildFallbackDiffDetails,
 	buildPopupViewModel,
 	selectCurrentProfile,
 	summarizeStoredProfiles,
@@ -18,6 +19,11 @@ import {
 	type CourseAppearanceSummary
 } from '../../../../packages/google-calendar/src/course-appearance.ts';
 import type { ManagedEvent } from '../../../../packages/timetable/src/index.ts';
+import {
+	SELECTED_SOURCE_KIND_KEY,
+	normalizeSelectedSourceKind,
+	sourceCapabilityText
+} from './source-selection.ts';
 
 const statusTitle = requireElement<HTMLParagraphElement>('status-title');
 const statusDetail = requireElement<HTMLParagraphElement>('status-detail');
@@ -49,6 +55,8 @@ const webBridgeState = requireElement<HTMLElement>('web-bridge-state');
 const openWeb = requireElement<HTMLButtonElement>('open-web');
 const webSyncCourses = requireElement<HTMLElement>('web-sync-courses');
 const themePreference = requireElement<HTMLSelectElement>('theme-preference');
+const sourceKindSelect = requireElement<HTMLSelectElement>('source-kind');
+const sourceCapability = requireElement<HTMLParagraphElement>('source-capability');
 const settingsDisclosure = requireElement<HTMLDetailsElement>('settings-disclosure');
 const PROFILE_STORAGE_KEY = 'bkalendar-next:profiles';
 const themeController = createPopupThemeController(
@@ -64,6 +72,7 @@ let credentialsConfigured = false;
 let settingsLoaded = false;
 let currentTrackingMode: TrackingMode = 'off';
 let googleConnected = false;
+let selectedSourceKind = normalizeSelectedSourceKind(undefined);
 
 void initializePopup();
 const webBridgeTimer = window.setInterval(() => {
@@ -89,6 +98,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 	if (
 		changes[EXTENSION_STATUS_KEY] ||
 		changes[PROFILE_STORAGE_KEY] ||
+		changes[SELECTED_SOURCE_KIND_KEY] ||
 		Object.keys(changes).some((key) => key.startsWith('bkalendar-next:course-colors:'))
 	) {
 		void renderStoredState();
@@ -124,6 +134,10 @@ openWeb.addEventListener('click', () => {
 	void chrome.tabs.create({ url: WEB_REVIEW_URL });
 });
 
+sourceKindSelect.addEventListener('change', () => {
+	void selectTimetableSource(sourceKindSelect.value);
+});
+
 themePreference.addEventListener('change', () => {
 	void themeController.update(
 		themePreference.value as Parameters<typeof themeController.update>[0]
@@ -136,13 +150,28 @@ primaryAction.addEventListener('click', () => {
 
 async function renderStoredState(): Promise<void> {
 	const stored = await chrome.storage.local.get(null);
+	selectedSourceKind = normalizeSelectedSourceKind(stored[SELECTED_SOURCE_KIND_KEY]);
+	sourceKindSelect.value = selectedSourceKind;
+	sourceCapability.textContent = sourceCapabilityText(selectedSourceKind);
 	const status = stored[EXTENSION_STATUS_KEY] as ExtensionStatus | undefined;
 	const profiles = summarizeStoredProfiles(stored[PROFILE_STORAGE_KEY]);
-	const currentProfile = selectCurrentProfile(profiles);
-	const details = buildStoredDiffDetails(
+	const currentProfile = selectCurrentProfile(profiles, selectedSourceKind);
+	const statusForSource =
+		status &&
+		'sourceKind' in status &&
+		status.sourceKind !== undefined &&
+		status.sourceKind !== selectedSourceKind
+			? { state: 'idle' as const }
+			: status;
+	const storedDetails = buildStoredDiffDetails(
 		stored[PROFILE_STORAGE_KEY],
-		stored[LAST_DIFF_STORAGE_KEY]
+		stored[LAST_DIFF_STORAGE_KEY],
+		selectedSourceKind
 	);
+	const details =
+		storedDetails.length > 0
+			? storedDetails
+			: buildFallbackDiffDetails(statusForSource ?? { state: 'idle' });
 	const courseAppearances = currentProfile
 		? readCourseAppearances(
 				stored[PROFILE_STORAGE_KEY],
@@ -151,11 +180,12 @@ async function renderStoredState(): Promise<void> {
 			)
 		: [];
 	const viewModel = buildPopupViewModel(
-		status ?? { state: 'idle' },
+		statusForSource ?? { state: 'idle' },
 		currentProfile,
 		settingsLoaded ? credentialsConfigured : undefined,
 		settingsLoaded ? currentTrackingMode : undefined,
-		settingsLoaded ? googleConnected : undefined
+		settingsLoaded ? googleConnected : undefined,
+		selectedSourceKind
 	);
 
 	statusDot.dataset.state = viewModel.tone;
@@ -201,8 +231,18 @@ async function renderStoredState(): Promise<void> {
 		new URLSearchParams(location.search).get('view') === 'diff' ||
 		location.hash === '#diff-details'
 	) {
-		requestAnimationFrame(() => diffDetails.scrollIntoView({ block: 'start' }));
+		requestAnimationFrame(() => {
+			if (!diffDetails.hidden) diffDetails.scrollIntoView({ block: 'start' });
+		});
 	}
+}
+
+async function selectTimetableSource(value: string): Promise<void> {
+	selectedSourceKind = normalizeSelectedSourceKind(value);
+	await chrome.storage.local.set({
+		[SELECTED_SOURCE_KIND_KEY]: selectedSourceKind
+	});
+	await renderStoredState();
 }
 
 function readCourseAppearances(

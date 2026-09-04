@@ -54,6 +54,23 @@ describe('extension popup visual structure', () => {
 		assert.match(main, /bkalendar:polling:set-interval/);
 	});
 
+	it('lets the user inspect every supported timetable source without pretending all are tracked', async () => {
+		const [html, main] = await Promise.all([
+			readFile(htmlPath, 'utf8'),
+			readFile(mainPath, 'utf8')
+		]);
+
+		assert.match(html, /id="source-kind"/);
+		assert.match(html, /value="student-2024"/);
+		assert.match(html, /value="student-legacy"/);
+		assert.match(html, /value="lecturer"/);
+		assert.match(html, /value="postgraduate"/);
+		assert.match(html, /id="source-capability"/);
+		assert.match(main, /SELECTED_SOURCE_KIND_KEY/);
+		assert.match(main, /selectCurrentProfile\(profiles,\s*selectedSourceKind\)/);
+		assert.match(main, /statusForSource/);
+	});
+
 	it('shows whether the local bridge to the BKalendar website is active', async () => {
 		const [html, main] = await Promise.all([
 			readFile(htmlPath, 'utf8'),
@@ -66,7 +83,7 @@ describe('extension popup visual structure', () => {
 		assert.match(html, /Web → Extension/);
 		assert.match(html, /Màu môn học · Icon sự kiện · Hồ sơ lịch và Calendar ID/);
 		assert.match(html, /Extension → Web/);
-		assert.match(html, /TKB MyBK mới nhất · Diff thay đổi · Trạng thái đồng bộ/);
+		assert.match(html, /Hồ sơ lịch theo từng nguồn · Diff thay đổi · Trạng thái đồng bộ/);
 		assert.match(html, /id="web-sync-courses"/);
 		assert.match(html, /id="open-web"/);
 		assert.match(main, /bkalendar:web-bridge:status:get/);

@@ -6,6 +6,7 @@
 		GoogleCalendarRestGateway,
 		createManagedCalendar,
 		findManagedCalendars,
+		isGoogleCalendarAuthError,
 		requestGoogleAccessToken,
 		revokeGoogleAccessToken,
 		type SyncResult
@@ -14,7 +15,7 @@
 		createBrowserStorage,
 		createProfileStore
 	} from '../../../../packages/timetable/src/storage.ts';
-	import { diffSnapshots } from '../../../../packages/timetable/src/index.ts';
+	import { diffSnapshots, type SourceKind } from '../../../../packages/timetable/src/index.ts';
 	import ChangeSummary from '$lib/components/ChangeSummary.svelte';
 	import CourseColorPicker from '$lib/components/CourseColorPicker.svelte';
 	import ScheduleBoard from '$lib/components/ScheduleBoard.svelte';
@@ -29,7 +30,7 @@
 	} from '$lib/extension-handoff.ts';
 	import type { ExtensionState } from '../../../../packages/timetable/src/index.ts';
 	import { loadGoogleIdentity } from '$lib/google-identity.ts';
-	import { syncPendingProfile } from '$lib/google-sync.ts';
+	import { syncPendingProfile, syncWithGoogleReauth } from '$lib/google-sync.ts';
 	import { createIcalendarExport, triggerIcalendarDownload } from '$lib/ical-download.ts';
 	import {
 		buildCourseColorAssignments,
@@ -61,6 +62,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	};
 
 	let source = '';
+	let sourceKind: SourceKind = 'student-2024';
 	let result: Prepared | undefined;
 	let sourceIsSample = false;
 	let errorMessage = '';
@@ -76,6 +78,13 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	let courseAppearanceSummary: CourseAppearanceSummary[] = [];
 
 	const googleClientId = env.PUBLIC_GOOGLE_CLIENT_ID?.trim() ?? '';
+	const sourceDescriptions: Record<SourceKind, string> = {
+		'student-2024': 'MyBK mới · mybk.hcmut.edu.vn/app',
+		'student-legacy': 'MyBK cũ · mybk.hcmut.edu.vn/stinfo',
+		lecturer: 'Lịch giảng viên · tkb.hcmut.edu.vn',
+		postgraduate: 'Lịch sau đại học · grad.hcmut.edu.vn'
+	};
+	$: selectedSourceDescription = sourceDescriptions[sourceKind];
 
 	onMount(() => {
 		const targetWindow = window as unknown as ExtensionMessageWindow;
@@ -138,6 +147,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			diff: diffSnapshots(newest.acceptedSnapshot, snapshot),
 			profile: syncedProfile
 		};
+		sourceKind = snapshot.sourceKind;
 		loadCourseAppearance(result, false);
 		if (state.status.state === 'error') {
 			extensionHandoffMessage = state.status.message;
@@ -155,6 +165,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			if (response.status === 'ready') {
 				const store = createProfileStore(createBrowserStorage(window.localStorage));
 				result = await stageTransferredSnapshot(store, response.snapshot);
+				sourceKind = response.snapshot.sourceKind;
 				loadCourseAppearance(result, false);
 				extensionHandoffMessage =
 					'Đã nhận thời khóa biểu từ extension. Hãy xem lại thay đổi trước khi chọn nơi đồng bộ.';
@@ -182,7 +193,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	async function importTimetable(): Promise<void> {
 		errorMessage = '';
 		if (source.trim() === '') {
-			errorMessage = 'Hãy dán bảng thời khóa biểu từ MyBK trước khi tiếp tục.';
+			errorMessage = 'Hãy dán bảng thời khóa biểu từ nguồn đã chọn trước khi tiếp tục.';
 			return;
 		}
 
@@ -191,7 +202,8 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			if (sourceIsSample) {
 				result = await prepareTimetable(source, undefined, {
 					capturedAt: new Date().toISOString(),
-					completeness: inferCaptureCompleteness(source),
+					completeness: inferCaptureCompleteness(source, sourceKind),
+					sourceKind,
 					provenance: 'sample'
 				});
 				loadCourseAppearance(result, false);
@@ -199,7 +211,8 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 				const store = createProfileStore(createBrowserStorage(window.localStorage));
 				result = await stageTimetableImport(store, source, {
 					capturedAt: new Date().toISOString(),
-					completeness: inferCaptureCompleteness(source),
+					completeness: inferCaptureCompleteness(source, sourceKind),
+					sourceKind,
 					provenance: 'user'
 				});
 				loadCourseAppearance(result, true);
@@ -221,12 +234,22 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	}
 
 	function useSample(): void {
+		sourceKind = 'student-2024';
 		source = sample;
 		sourceIsSample = true;
 		result = undefined;
 		courseColorPreferences = defaultCourseColorPreferences();
 		courseColorAssignments = {};
 		errorMessage = '';
+	}
+
+	function changeSourceKind(): void {
+		result = undefined;
+		sourceIsSample = false;
+		errorMessage = '';
+		courseColorPreferences = defaultCourseColorPreferences();
+		courseColorAssignments = {};
+		courseAppearanceSummary = [];
 	}
 
 	function loadCourseAppearance(prepared: Prepared, publish = true): void {
@@ -299,19 +322,46 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		}
 
 		syncingGoogle = true;
-		let accessToken = '';
+		const issuedTokens = new Set<string>();
 		try {
 			const identity = await loadGoogleIdentity();
-			accessToken = await requestGoogleAccessToken(identity, googleClientId);
 			const store = createProfileStore(createBrowserStorage(window.localStorage));
-			const synced = await syncPendingProfile(store, result.profileId, {
-				gateway: new GoogleCalendarRestGateway(accessToken),
-				findCalendars: async (summary) => await findManagedCalendars(fetch, accessToken, summary),
-				createCalendar: async (summary) => await createManagedCalendar(fetch, accessToken, summary),
-				prepareEvents: (events) =>
-					colorizeEventsForSync(events, courseColorAssignments, courseColorPreferences.icons),
-				onProgress(progress) {
-					googleResult = { ...progress, failed: [...progress.failed] };
+			const synced = await syncWithGoogleReauth({
+				async requestToken() {
+					const token = await requestGoogleAccessToken(identity, googleClientId);
+					issuedTokens.add(token);
+					return token;
+				},
+				async run(accessToken) {
+					const attempt = await syncPendingProfile(store, result!.profileId, {
+						gateway: new GoogleCalendarRestGateway(accessToken),
+						findCalendars: async (summary) =>
+							await findManagedCalendars(fetch, accessToken, summary),
+						createCalendar: async (summary) =>
+							await createManagedCalendar(fetch, accessToken, summary),
+						prepareEvents: (events) =>
+							colorizeEventsForSync(events, courseColorAssignments, courseColorPreferences.icons),
+						onProgress(progress) {
+							googleResult = { ...progress, failed: [...progress.failed] };
+						}
+					});
+					const authFailure = attempt.result.failed.find((failure) =>
+						isGoogleCalendarAuthError(new Error(failure.message))
+					);
+					if (authFailure) throw new Error(authFailure.message);
+					return attempt;
+				},
+				onReauth() {
+					googleMessage = 'Phiên Google đã hết hạn. BKalendar đang yêu cầu đăng nhập Google lại…';
+				},
+				async beforeRetry() {
+					const oldToken = [...issuedTokens].at(-1);
+					if (!oldToken) return;
+					try {
+						await revokeGoogleAccessToken(oldToken);
+					} catch {
+						// Revocation is best-effort; requesting a fresh interactive token is mandatory.
+					}
 				}
 			});
 			googleResult = synced.result;
@@ -329,7 +379,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		} catch (error) {
 			googleMessage = error instanceof Error ? error.message : 'Không thể đồng bộ Google Calendar.';
 		} finally {
-			if (accessToken) {
+			for (const accessToken of issuedTokens) {
 				try {
 					await revokeGoogleAccessToken(accessToken);
 				} catch {
@@ -472,16 +522,27 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		</div>
 
 		<form on:submit|preventDefault={importTimetable}>
-			<label for="timetable-source">Nội dung sao chép từ bảng thời khóa biểu MyBK</label>
+			<label class="source-kind-field" for="schedule-source">
+				<span>Loại lịch</span>
+				<select id="schedule-source" bind:value={sourceKind} on:change={changeSourceKind}>
+					<option value="student-2024">Sinh viên (mybk.hcmut.edu.vn/app)</option>
+					<option value="student-legacy">Sinh viên (mybk.hcmut.edu.vn/stinfo)</option>
+					<option value="lecturer">Giảng viên (tkb.hcmut.edu.vn)</option>
+					<option value="postgraduate">Sau đại học (grad.hcmut.edu.vn)</option>
+				</select>
+				<small>Chọn đúng nguồn để BKalendar dùng parser và cấu trúc tuần học tương ứng.</small>
+			</label>
+			<label for="timetable-source">Nội dung sao chép từ bảng thời khóa biểu</label>
+			<p class="source-kind-current">{selectedSourceDescription}</p>
 			<textarea
 				id="timetable-source"
 				bind:value={source}
 				on:input={() => (sourceIsSample = false)}
 				rows="10"
-				placeholder="Sao chép toàn bộ bảng trên MyBK rồi dán vào đây…"
+				placeholder={`Sao chép toàn bộ bảng từ ${selectedSourceDescription} rồi dán vào đây…`}
 				spellcheck="false"></textarea>
 			<div class="form-footer">
-				<p>Không dán tên đăng nhập, mật khẩu hoặc cookie MyBK.</p>
+				<p>Không dán tên đăng nhập, mật khẩu, cookie hoặc token.</p>
 				<button class="primary-button" type="submit" disabled={busy}>
 					{busy ? 'Đang đọc lịch…' : 'Đọc thời khóa biểu'}
 				</button>
@@ -501,7 +562,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			<div><span>Học kỳ</span><strong>{result.snapshot.semester}</strong></div>
 			<div><span>Buổi học</span><strong>{result.snapshot.events.length}</strong></div>
 			<div>
-				<span>Cập nhật MyBK</span>
+				<span>Cập nhật nguồn</span>
 				<strong>{result.snapshot.sourceUpdatedAt?.slice(0, 10) ?? 'Không rõ'}</strong>
 			</div>
 			<div><span>Profile</span><strong>{result.profileId}</strong></div>

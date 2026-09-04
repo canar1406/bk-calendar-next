@@ -1,5 +1,6 @@
 import type { MyBkCredentials } from '../auth/credential-vault.ts';
 import type { MyBkCapture } from '../content/extract.ts';
+import type { SourceKind } from '../../../../packages/timetable/src/index.ts';
 
 export const MYBK_TIMETABLE_URL = 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb';
 export const HCMUT_CAS_RENEW_URL =
@@ -68,8 +69,10 @@ export interface HiddenScriptApi {
 export interface HiddenTabCaptureOptions {
 	api: HiddenTabApi;
 	url: string;
+	sourceKind?: SourceKind;
 	credentials: MyBkCredentials;
 	waitForCapture(tabId: number): Promise<MyBkCapture>;
+	registerSessionExpired?(tabId: number, handler: (reason?: string) => Promise<void>): () => void;
 	cancelCapture?(tabId: number, error: unknown): boolean;
 	submitCredentials(tabId: number, credentials: MyBkCredentials): Promise<boolean>;
 }
@@ -79,6 +82,8 @@ export interface HiddenCaptureRegistry {
 	wait(tabId: number, timeoutMs: number): Promise<MyBkCapture>;
 	resolve(tabId: number, capture: MyBkCapture): boolean;
 	reject(tabId: number, error: unknown): boolean;
+	signalSessionExpired(tabId: number, reason?: string): boolean;
+	registerSessionExpired(tabId: number, handler: (reason?: string) => Promise<void>): () => void;
 }
 
 interface CaptureWaiter {
@@ -89,6 +94,7 @@ interface CaptureWaiter {
 
 export function createHiddenCaptureRegistry(): HiddenCaptureRegistry {
 	const waiters = new Map<number, CaptureWaiter>();
+	const sessionHandlers = new Map<number, (reason?: string) => Promise<void>>();
 
 	function take(tabId: number): CaptureWaiter | undefined {
 		const waiter = waiters.get(tabId);
@@ -125,6 +131,21 @@ export function createHiddenCaptureRegistry(): HiddenCaptureRegistry {
 			if (!waiter) return false;
 			waiter.reject(error);
 			return true;
+		},
+		signalSessionExpired(tabId, reason) {
+			const handler = sessionHandlers.get(tabId);
+			if (!handler) return false;
+			void handler(reason).catch((error) => {
+				const waiter = take(tabId);
+				waiter?.reject(error);
+			});
+			return true;
+		},
+		registerSessionExpired(tabId, handler) {
+			sessionHandlers.set(tabId, handler);
+			return () => {
+				if (sessionHandlers.get(tabId) === handler) sessionHandlers.delete(tabId);
+			};
 		}
 	};
 }
@@ -132,8 +153,10 @@ export function createHiddenCaptureRegistry(): HiddenCaptureRegistry {
 export async function captureInHiddenTab({
 	api,
 	url,
+	sourceKind = 'student-2024',
 	credentials,
 	waitForCapture,
+	registerSessionExpired,
 	cancelCapture,
 	submitCredentials
 }: HiddenTabCaptureOptions): Promise<MyBkCapture> {
@@ -158,6 +181,7 @@ export async function captureInHiddenTab({
 	});
 	let navigationSteps = 0;
 	let submittedCas = false;
+	let sessionRecoveryAttempts = 0;
 	let navigationQueue = Promise.resolve();
 
 	const listener: HiddenTabUpdateListener = (updatedTabId, changeInfo, updatedTab) => {
@@ -171,7 +195,7 @@ export async function captureInHiddenTab({
 					throw new Error('MyBK chuyển hướng quá nhiều lần khi đọc TKB.');
 				}
 
-				const route = classifyMyBkRoute(currentUrl, url);
+				const route = classifyMyBkRoute(currentUrl, url, sourceKind);
 				if (route === 'timetable') return;
 				if (route === 'app-home') {
 					await api.update(tabId, { url });
@@ -191,12 +215,28 @@ export async function captureInHiddenTab({
 					}
 					return;
 				}
+				if (route === 'portal-login') {
+					if (submittedCas) return;
+					if (await submitCredentials(tabId, credentials)) submittedCas = true;
+					return;
+				}
 				throw new Error('MyBK chuyển đến một trang không được hỗ trợ khi đọc TKB.');
 			})
 			.catch(rejectNavigation);
 	};
 
 	const capturePromise = waitForCapture(tabId);
+	const unregisterSessionExpired =
+		registerSessionExpired?.(tabId, async () => {
+			if (sessionRecoveryAttempts >= 1) {
+				throw new Error('Phiên MyBK vẫn hết hạn sau khi đăng nhập lại.');
+			}
+			sessionRecoveryAttempts += 1;
+			submittedCas = false;
+			await api.update(tabId, {
+				url: sourceKind === 'student-2024' ? HCMUT_CAS_RENEW_URL : url
+			});
+		}) ?? (() => {});
 	api.onUpdated.addListener(listener);
 	let terminalError: unknown;
 	try {
@@ -207,6 +247,7 @@ export async function captureInHiddenTab({
 		throw error;
 	} finally {
 		cancelCapture?.(tabId, terminalError ?? new Error('Lượt đọc TKB trong tab nền đã kết thúc.'));
+		unregisterSessionExpired();
 		api.onUpdated.removeListener(listener);
 		await api.removeWindow(windowId).catch(() => {});
 	}
@@ -221,15 +262,17 @@ export async function submitCasCredentials(
 		target: { tabId },
 		func: (username, password) => {
 			const usernameInput = document.querySelector<HTMLInputElement>(
-				'input[name="username"], input#username'
+				'input[name="username"], input#username, input[name="user"], input[type="email"]'
 			);
 			const passwordInput = document.querySelector<HTMLInputElement>(
-				'input[name="password"], input#password'
+				'input[name="password"], input#password, input[type="password"]'
 			);
 			const form =
 				passwordInput?.form ??
 				usernameInput?.form ??
-				document.querySelector<HTMLFormElement>('form#fm1, form[action*="/cas/login"]');
+				document.querySelector<HTMLFormElement>(
+					'form#fm1, form[action*="/cas/login"], form:has(input[type="password"])'
+				);
 			if (!usernameInput || !passwordInput || !form) return false;
 
 			const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -268,21 +311,31 @@ function readFirstTab(window: unknown): unknown {
 	return Array.isArray(window.tabs) ? window.tabs[0] : undefined;
 }
 
-type MyBkRoute = 'timetable' | 'app-home' | 'mybk-login' | 'cas-login' | 'unknown';
+type MyBkRoute = 'timetable' | 'app-home' | 'mybk-login' | 'cas-login' | 'portal-login' | 'unknown';
 
-function classifyMyBkRoute(currentUrl: string, timetableUrl: string): MyBkRoute {
+function classifyMyBkRoute(
+	currentUrl: string,
+	timetableUrl: string,
+	sourceKind: SourceKind
+): MyBkRoute {
 	try {
 		const current = new URL(currentUrl);
 		const timetable = new URL(timetableUrl);
+		const isSameSourceHost = current.hostname === timetable.hostname;
+		const isLoginPath = /(?:login|signin|auth|cas)/iu.test(current.pathname);
 		if (
-			current.hostname === timetable.hostname &&
-			current.pathname.startsWith(timetable.pathname)
+			sourceKind === 'student-2024' &&
+			isSameSourceHost &&
+			!isLoginPath &&
+			(current.pathname === timetable.pathname ||
+				current.pathname.startsWith(`${timetable.pathname}/`))
 		) {
 			return 'timetable';
 		}
 		if (current.hostname === 'sso.hcmut.edu.vn' && current.pathname.startsWith('/cas/login')) {
 			return 'cas-login';
 		}
+		if (sourceKind !== 'student-2024' && isSameSourceHost) return 'portal-login';
 		if (current.hostname !== 'mybk.hcmut.edu.vn') return 'unknown';
 		if (current.pathname.startsWith('/app/login/cas')) return 'app-home';
 		if (current.pathname.startsWith('/app/login')) return 'mybk-login';

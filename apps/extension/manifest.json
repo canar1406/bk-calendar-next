@@ -1,13 +1,16 @@
 {
 	"manifest_version": 3,
 	"name": "BKalendar Next",
-	"version": "0.4.6",
+	"version": "0.4.8",
 	"description": "Đọc thời khóa biểu MyBK cục bộ và báo trạng thái để bạn chủ động xem lại.",
 	"permissions": ["storage", "alarms", "notifications", "identity", "scripting"],
 	"host_permissions": [
 		"https://mybk.hcmut.edu.vn/app/*",
+		"https://mybk.hcmut.edu.vn/stinfo*",
 		"http://mybk.hcmut.edu.vn/app/*",
 		"https://sso.hcmut.edu.vn/cas/login*",
+		"https://tkb.hcmut.edu.vn/*",
+		"https://grad.hcmut.edu.vn/*",
 		"https://canar1406.github.io/bk-calendar-next/*",
 		"https://www.googleapis.com/calendar/v3/*"
 	],
@@ -34,6 +37,14 @@
 	"content_scripts": [
 		{
 			"matches": ["https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb*"],
+			"js": ["content.js"]
+		},
+		{
+			"matches": [
+				"https://mybk.hcmut.edu.vn/stinfo*",
+				"https://tkb.hcmut.edu.vn/*",
+				"https://grad.hcmut.edu.vn/*"
+			],
 			"js": ["content.js"]
 		},
 		{

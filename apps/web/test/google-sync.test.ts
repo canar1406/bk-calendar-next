@@ -14,7 +14,7 @@ import {
 	type KeyValueStorage,
 	type SyncProfile
 } from '../../../packages/timetable/src/storage.ts';
-import { syncPendingProfile } from '../src/lib/google-sync.ts';
+import { syncPendingProfile, syncWithGoogleReauth } from '../src/lib/google-sync.ts';
 
 class MemoryStorage implements KeyValueStorage {
 	private values = new Map<string, unknown>();
@@ -63,6 +63,28 @@ const event: ManagedEvent = {
 };
 
 describe('Google profile sync workflow', () => {
+	it('re-authenticates once after Google reports an expired token', async () => {
+		let tokenRequests = 0;
+		let syncAttempts = 0;
+		let retryPreparation = 0;
+		const result = await syncWithGoogleReauth({
+			requestToken: async () => `token-${++tokenRequests}`,
+			run: async () => {
+				syncAttempts += 1;
+				if (syncAttempts === 1) throw new Error('Google Calendar API 401: Invalid Credentials');
+				return 'synced';
+			},
+			beforeRetry: () => {
+				retryPreparation += 1;
+			}
+		});
+
+		assert.equal(result, 'synced');
+		assert.equal(tokenRequests, 2);
+		assert.equal(syncAttempts, 2);
+		assert.equal(retryPreparation, 1);
+	});
+
 	it('persists a newly created calendar ID before inserting events and then promotes the snapshot', async () => {
 		const store = createProfileStore(new MemoryStorage());
 		const pending = await snapshot([event], {

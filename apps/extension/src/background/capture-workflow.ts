@@ -1,4 +1,4 @@
-import { createStudent2024Snapshot } from '../../../../packages/core/src/index.ts';
+import { createSourceSnapshot } from '../../../../packages/core/src/index.ts';
 import { stageSnapshot, type ProfileStore } from '../../../../packages/timetable/src/storage.ts';
 import type { MyBkCapture } from '../content/extract.ts';
 
@@ -7,7 +7,7 @@ export async function stageMyBkCapture(
 	capture: MyBkCapture,
 	capturedAt: string
 ) {
-	const snapshot = await createStudent2024Snapshot(capture.raw, {
+	const snapshot = await createSourceSnapshot(capture.raw, capture.sourceKind ?? 'student-2024', {
 		capturedAt,
 		completeness: capture.completeness
 	});

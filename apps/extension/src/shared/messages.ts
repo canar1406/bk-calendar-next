@@ -10,12 +10,20 @@ export type ContentMessage =
 	| {
 			type: 'bkalendar:capture-error';
 			reason?: string;
+	  }
+	| {
+			type: 'bkalendar:session-expired';
+			reason?: string;
 	  };
 
 export function isContentMessage(value: unknown): value is ContentMessage {
 	if (!value || typeof value !== 'object') return false;
 	const type = (value as { type?: unknown }).type;
-	return type === 'bkalendar:capture' || type === 'bkalendar:capture-error';
+	return (
+		type === 'bkalendar:capture' ||
+		type === 'bkalendar:capture-error' ||
+		type === 'bkalendar:session-expired'
+	);
 }
 
 export type PopupMessage =

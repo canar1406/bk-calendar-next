@@ -55,6 +55,38 @@ export async function disconnectGoogle(
 	}
 }
 
+export async function invalidateGoogleToken(
+	identity: ExtensionIdentityApi,
+	tokenStore?: ExtensionTokenStore
+): Promise<void> {
+	await tokenStore?.remove();
+	if (!identity.getAuthToken || !identity.removeCachedAuthToken) return;
+	try {
+		const result = await identity.getAuthToken({ interactive: false });
+		if (result.token) await identity.removeCachedAuthToken({ token: result.token });
+	} catch {
+		// The browser may already have removed the expired native token.
+	}
+}
+
+export async function runWithGoogleTokenRetry<T>(
+	identity: ExtensionIdentityApi,
+	interactiveClientId: string,
+	tokenStore: ExtensionTokenStore | undefined,
+	run: (accessToken: string) => Promise<T>,
+	isAuthError: (error: unknown) => boolean
+): Promise<T> {
+	let accessToken = await requestGoogleToken(identity, false, interactiveClientId, tokenStore);
+	try {
+		return await run(accessToken);
+	} catch (error) {
+		if (!isAuthError(error)) throw error;
+		await invalidateGoogleToken(identity, tokenStore);
+		accessToken = await requestGoogleToken(identity, true, interactiveClientId, tokenStore);
+		return await run(accessToken);
+	}
+}
+
 async function tryNativeToken(
 	identity: ExtensionIdentityApi,
 	interactive: boolean

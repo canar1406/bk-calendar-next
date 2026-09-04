@@ -13,6 +13,7 @@ export {
 	createStudent2024Snapshot,
 	type Student2024SnapshotOptions
 } from './student-2024-snapshot.ts';
+export { createSourceSnapshot, type SourceSnapshotOptions } from './source-snapshot.ts';
 export {
 	ColumnCountError,
 	ParseError,

@@ -1,4 +1,5 @@
 import type { CaptureCompleteness, MyBkCapture } from '../content/extract.ts';
+import type { SourceKind } from '../../../../packages/timetable/src/index.ts';
 
 export const EXTENSION_STATUS_KEY = 'bkalendar-next:extension-status';
 
@@ -15,6 +16,7 @@ export type ExtensionStatus =
 	| {
 			state: 'captured';
 			capturedAt: string;
+			sourceKind?: SourceKind;
 			sourceUpdatedAt?: string;
 			completeness: CaptureCompleteness;
 			changes?: ChangeCounts;
@@ -23,6 +25,7 @@ export type ExtensionStatus =
 	| {
 			state: 'error';
 			checkedAt: string;
+			sourceKind?: SourceKind;
 			message: string;
 	  };
 
@@ -35,6 +38,7 @@ export function createCaptureStatus(
 	return {
 		state: 'captured',
 		capturedAt,
+		...(capture.sourceKind ? { sourceKind: capture.sourceKind } : {}),
 		...(capture.sourceUpdatedAt ? { sourceUpdatedAt: capture.sourceUpdatedAt } : {}),
 		completeness: structuredClone(capture.completeness),
 		...(changes ? { changes: structuredClone(changes) } : {}),
@@ -42,10 +46,15 @@ export function createCaptureStatus(
 	};
 }
 
-export function createErrorStatus(error: unknown, checkedAt: string): ExtensionStatus {
+export function createErrorStatus(
+	error: unknown,
+	checkedAt: string,
+	sourceKind?: SourceKind
+): ExtensionStatus {
 	return {
 		state: 'error',
 		checkedAt,
+		...(sourceKind ? { sourceKind } : {}),
 		message: safeErrorMessage(error)
 	};
 }

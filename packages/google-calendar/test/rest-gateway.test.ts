@@ -5,6 +5,7 @@ import {
 	MANAGED_BY,
 	createManagedCalendar,
 	findManagedCalendars,
+	isGoogleCalendarAuthError,
 	toGoogleEventResource
 } from '../src/rest.ts';
 import type { ManagedEvent } from '../../timetable/src/index.ts';
@@ -36,6 +37,17 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('Google Calendar REST payload', () => {
+	it('identifies expired or unauthorized Google tokens without classifying ordinary API errors', () => {
+		assert.equal(
+			isGoogleCalendarAuthError(new Error('Google Calendar API 401: Invalid Credentials')),
+			true
+		);
+		assert.equal(
+			isGoogleCalendarAuthError(new Error('Google Calendar API 403: quota exceeded')),
+			false
+		);
+	});
+
 	it('marks events and emits recurring master data', () => {
 		const resource = toGoogleEventResource({
 			...managedEvent,

@@ -3,7 +3,9 @@ import { describe, it } from 'node:test';
 import {
 	disconnectGoogle,
 	GOOGLE_WEB_CLIENT_ID,
+	invalidateGoogleToken,
 	requestGoogleToken,
+	runWithGoogleTokenRetry,
 	type ExtensionTokenStore,
 	type ExtensionIdentityApi
 } from '../src/background/google-auth.ts';
@@ -240,5 +242,75 @@ describe('cross-browser extension Google OAuth', () => {
 
 		await disconnectGoogle(identity, store);
 		assert.equal(removed, true);
+	});
+
+	it('invalidates both native and web-flow token caches before a re-login retry', async () => {
+		let removedNative = '';
+		let removedStore = false;
+		const identity: ExtensionIdentityApi = {
+			async getAuthToken() {
+				return { token: 'expired-native-token' };
+			},
+			getRedirectURL() {
+				return 'https://extension.chromiumapp.org/';
+			},
+			async launchWebAuthFlow() {
+				return undefined;
+			},
+			async removeCachedAuthToken(details) {
+				removedNative = details.token;
+			}
+		};
+		const store: ExtensionTokenStore = {
+			async read() {
+				return { token: 'expired-web-token', expiresAt: Date.now() + 60_000 };
+			},
+			async write() {},
+			async remove() {
+				removedStore = true;
+			}
+		};
+
+		await invalidateGoogleToken(identity, store);
+
+		assert.equal(removedNative, 'expired-native-token');
+		assert.equal(removedStore, true);
+	});
+
+	it('retries a Google operation once with a fresh interactive token after a 401', async () => {
+		let interactive = false;
+		let attempts = 0;
+		const identity: ExtensionIdentityApi = {
+			async getAuthToken(details) {
+				if (details.interactive) {
+					interactive = true;
+					return { token: 'fresh-token' };
+				}
+				return { token: 'expired-token' };
+			},
+			getRedirectURL() {
+				return 'https://extension.chromiumapp.org/';
+			},
+			async launchWebAuthFlow() {
+				throw new Error('native token should be used');
+			},
+			async removeCachedAuthToken() {}
+		};
+
+		const result = await runWithGoogleTokenRetry(
+			identity,
+			webClientId,
+			undefined,
+			async (token) => {
+				attempts += 1;
+				if (token === 'expired-token') throw new Error('Google Calendar API 401: expired');
+				return token;
+			},
+			(error) => error instanceof Error && /api 401/i.test(error.message)
+		);
+
+		assert.equal(result, 'fresh-token');
+		assert.equal(attempts, 2);
+		assert.equal(interactive, true);
 	});
 });

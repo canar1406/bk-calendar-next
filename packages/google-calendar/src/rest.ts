@@ -311,6 +311,16 @@ export class GoogleCalendarApiError extends Error {
 	}
 }
 
+export function isGoogleCalendarAuthError(error: unknown): boolean {
+	return (
+		(error instanceof GoogleCalendarApiError &&
+			(error.status === 401 ||
+				/invalid credentials|invalid_token|unauthorized/i.test(error.detail))) ||
+		(error instanceof Error &&
+			/google calendar api 401|invalid credentials|invalid_token|unauthorized/i.test(error.message))
+	);
+}
+
 function isInsufficientCalendarListScope(error: unknown): boolean {
 	return (
 		error instanceof GoogleCalendarApiError &&

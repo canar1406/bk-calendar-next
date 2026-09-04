@@ -28,9 +28,12 @@ interface ExtensionManifest {
 
 const manifestPath = new URL('../manifest.json', import.meta.url);
 const myBkAppUrl = 'https://mybk.hcmut.edu.vn/app/*';
+const myBkLegacyUrl = 'https://mybk.hcmut.edu.vn/stinfo*';
 const myBkHttpAppUrl = 'http://mybk.hcmut.edu.vn/app/*';
 const myBkTimetableUrl = 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb*';
 const hcmutSsoUrl = 'https://sso.hcmut.edu.vn/cas/login*';
+const lecturerUrl = 'https://tkb.hcmut.edu.vn/*';
+const postgraduateUrl = 'https://grad.hcmut.edu.vn/*';
 const reviewUrl = 'https://canar1406.github.io/bk-calendar-next/*';
 const googleCalendarApiUrl = 'https://www.googleapis.com/calendar/v3/*';
 
@@ -52,8 +55,11 @@ describe('MV3 manifest', () => {
 		]);
 		assert.deepEqual(manifest.host_permissions, [
 			myBkAppUrl,
+			myBkLegacyUrl,
 			myBkHttpAppUrl,
 			hcmutSsoUrl,
+			lecturerUrl,
+			postgraduateUrl,
 			reviewUrl,
 			googleCalendarApiUrl
 		]);
@@ -83,6 +89,10 @@ describe('MV3 manifest', () => {
 		assert.deepEqual(manifest.content_scripts, [
 			{
 				matches: [myBkTimetableUrl],
+				js: ['content.js']
+			},
+			{
+				matches: [myBkLegacyUrl, lecturerUrl, postgraduateUrl],
 				js: ['content.js']
 			},
 			{

@@ -21,10 +21,16 @@ import {
 	GoogleCalendarRestGateway,
 	createManagedCalendar,
 	findManagedCalendars,
+	isGoogleCalendarAuthError,
 	syncManagedPresentation
 } from '../../../../packages/google-calendar/src/index.ts';
 import { syncPendingProfile } from '../../../../packages/google-calendar/src/profile-sync.ts';
-import { GOOGLE_WEB_CLIENT_ID, disconnectGoogle, requestGoogleToken } from './google-auth.ts';
+import {
+	GOOGLE_WEB_CLIENT_ID,
+	disconnectGoogle,
+	requestGoogleToken,
+	runWithGoogleTokenRetry
+} from './google-auth.ts';
 import {
 	createGoogleTokenStore,
 	createMemoryTokenStorageArea,
@@ -43,7 +49,6 @@ import {
 } from '../../../../packages/google-calendar/src/course-appearance.ts';
 import { prepareEventsWithCourseAppearance } from '../shared/course-appearance.ts';
 import {
-	MYBK_TIMETABLE_URL,
 	captureInHiddenTab,
 	createHiddenCaptureRegistry,
 	submitCasCredentials
@@ -60,6 +65,11 @@ import {
 	type WebBridgeStatePush
 } from '../shared/web-bridge-runtime.ts';
 import { ensureWebBridgeConnection, WEB_APP_URL_PATTERN } from './web-bridge-presence.ts';
+import {
+	SELECTED_SOURCE_KIND_KEY,
+	normalizeSelectedSourceKind,
+	sourceOptionFor
+} from '../shared/source-kind.ts';
 
 const TRACKING_ALARM = 'bkalendar-next:track-mybk';
 const TRACKING_MODE_KEY = 'bkalendar-next:tracking-mode';
@@ -249,20 +259,27 @@ async function syncCourseAppearanceToGoogle(profileId: string): Promise<void> {
 	}
 
 	try {
-		const accessToken = await requestGoogleToken(
+		const result = await runWithGoogleTokenRetry(
 			chrome.identity,
-			false,
 			GOOGLE_WEB_CLIENT_ID,
-			googleTokenStore
+			googleTokenStore,
+			async (accessToken) => {
+				const attempt = await syncManagedPresentation(
+					new GoogleCalendarRestGateway(accessToken),
+					calendarId,
+					prepareEventsWithCourseAppearance(snapshot.events, preferences)
+				);
+				const authFailure = attempt.failed.find((failure) =>
+					isGoogleCalendarAuthError(new Error(failure.message))
+				);
+				if (authFailure) throw new Error(authFailure.message);
+				if (attempt.failed.length > 0) {
+					throw new Error('Google Calendar chưa áp dụng đầy đủ màu và icon môn học.');
+				}
+				return attempt;
+			},
+			isGoogleCalendarAuthError
 		);
-		const result = await syncManagedPresentation(
-			new GoogleCalendarRestGateway(accessToken),
-			calendarId,
-			prepareEventsWithCourseAppearance(snapshot.events, preferences)
-		);
-		if (result.failed.length > 0) {
-			throw new Error('Google Calendar chưa áp dụng đầy đủ màu và icon môn học.');
-		}
 		recentAppearanceSyncs.set(profileId, { fingerprint, completedAt: Date.now() });
 		if (result.patched === 0) return;
 
@@ -450,7 +467,9 @@ async function performBackgroundTracking(force: boolean): Promise<void> {
 		if (force) throw new Error('Chưa lưu tài khoản MyBK.');
 		return;
 	}
+	const sourceKind = await readSelectedSourceKind();
 	try {
+		const source = sourceOptionFor(sourceKind);
 		const capture = await captureInHiddenTab({
 			api: {
 				createWindow: (properties) => chrome.windows.create(properties),
@@ -460,9 +479,12 @@ async function performBackgroundTracking(force: boolean): Promise<void> {
 				removeWindow: (windowId) => chrome.windows.remove(windowId),
 				onUpdated: chrome.tabs.onUpdated
 			},
-			url: MYBK_TIMETABLE_URL,
+			url: source.url,
+			sourceKind,
 			credentials,
 			waitForCapture: (tabId) => hiddenCaptureRegistry.wait(tabId, 30_000),
+			registerSessionExpired: (tabId, handler) =>
+				hiddenCaptureRegistry.registerSessionExpired(tabId, handler),
 			cancelCapture: (tabId, error) => hiddenCaptureRegistry.reject(tabId, error),
 			submitCredentials: (tabId, savedCredentials) =>
 				submitCasCredentials(chrome.scripting, tabId, savedCredentials)
@@ -470,7 +492,7 @@ async function performBackgroundTracking(force: boolean): Promise<void> {
 		await processCapture(capture, mode);
 	} catch (error) {
 		const now = new Date().toISOString();
-		await persistStatus(createErrorStatus(error, now));
+		await persistStatus(createErrorStatus(error, now, sourceKind));
 		await notifyTrackingError('BKalendar chưa thể cập nhật', safeMessage(error));
 		if (force) throw error;
 	}
@@ -505,21 +527,28 @@ async function processCapture(
 		return;
 	}
 
-	const accessToken = await requestGoogleToken(
-		chrome.identity,
-		false,
-		GOOGLE_WEB_CLIENT_ID,
-		googleTokenStore
-	);
 	const appearanceKey = courseColorStorageKey(staged.profileId);
 	const storedAppearance = await chrome.storage.local.get(appearanceKey);
-	const synced = await syncPendingProfile(store, staged.profileId, {
-		gateway: new GoogleCalendarRestGateway(accessToken),
-		findCalendars: async (summary) => await findManagedCalendars(fetch, accessToken, summary),
-		createCalendar: async (summary) => await createManagedCalendar(fetch, accessToken, summary),
-		prepareEvents: (events) =>
-			prepareEventsWithCourseAppearance(events, storedAppearance[appearanceKey])
-	});
+	const synced = await runWithGoogleTokenRetry(
+		chrome.identity,
+		GOOGLE_WEB_CLIENT_ID,
+		googleTokenStore,
+		async (accessToken) => {
+			const attempt = await syncPendingProfile(store, staged.profileId, {
+				gateway: new GoogleCalendarRestGateway(accessToken),
+				findCalendars: async (summary) => await findManagedCalendars(fetch, accessToken, summary),
+				createCalendar: async (summary) => await createManagedCalendar(fetch, accessToken, summary),
+				prepareEvents: (events) =>
+					prepareEventsWithCourseAppearance(events, storedAppearance[appearanceKey])
+			});
+			const authFailure = attempt.result.failed.find((failure) =>
+				isGoogleCalendarAuthError(new Error(failure.message))
+			);
+			if (authFailure) throw new Error(authFailure.message);
+			return attempt;
+		},
+		isGoogleCalendarAuthError
+	);
 	if (synced.result.failed.length > 0 || !synced.promoted) {
 		throw new Error('Google Calendar chưa áp dụng đầy đủ thay đổi.');
 	}
@@ -593,6 +622,11 @@ async function readPollingInterval(): Promise<PollingIntervalMinutes> {
 	);
 }
 
+async function readSelectedSourceKind() {
+	const stored = await chrome.storage.local.get(SELECTED_SOURCE_KIND_KEY);
+	return normalizeSelectedSourceKind(stored[SELECTED_SOURCE_KIND_KEY]);
+}
+
 async function stageCapture(capture: Parameters<typeof stageMyBkCapture>[1]): Promise<{
 	changes: ChangeSummary;
 	staged: Awaited<ReturnType<typeof stageMyBkCapture>>;
@@ -619,8 +653,21 @@ async function handleContentMessage(
 	const now = new Date().toISOString();
 	let status: ExtensionStatus;
 	if (message.type === 'bkalendar:capture') {
-		if (typeof tabId === 'number' && hiddenCaptureRegistry.resolve(tabId, message.capture)) return;
 		try {
+			const selectedSourceKind = await readSelectedSourceKind();
+			if (
+				message.capture.sourceKind !== undefined &&
+				message.capture.sourceKind !== selectedSourceKind
+			) {
+				const mismatch = new Error('Bảng thời khóa biểu không khớp với loại lịch đang theo dõi.');
+				if (typeof tabId === 'number' && hiddenCaptureRegistry.reject(tabId, mismatch)) {
+					return;
+				}
+				throw new Error('Bảng thời khóa biểu không khớp với loại lịch đang theo dõi.');
+			}
+			if (typeof tabId === 'number' && hiddenCaptureRegistry.resolve(tabId, message.capture)) {
+				return;
+			}
 			const mode = await readTrackingMode();
 			if (mode === 'auto-safe') {
 				await runSerializedCapture(message.capture, mode);
@@ -629,9 +676,32 @@ async function handleContentMessage(
 			}
 			return;
 		} catch (error) {
-			status = createErrorStatus(error, now);
+			status = createErrorStatus(error, now, await readSelectedSourceKind());
 		}
 	} else {
+		if (
+			message.type === 'bkalendar:session-expired' &&
+			typeof tabId === 'number' &&
+			hiddenCaptureRegistry.signalSessionExpired(tabId, message.reason)
+		) {
+			return;
+		}
+		if (message.type === 'bkalendar:session-expired') {
+			const sourceKind = await readSelectedSourceKind();
+			if ((await readTrackingMode()) !== 'off') {
+				await runBackgroundTracking();
+				return;
+			}
+			status = createErrorStatus(
+				new Error(
+					'Phiên MyBK đã hết hạn. Hãy bật theo dõi nền để extension đăng nhập lại tự động.'
+				),
+				now,
+				sourceKind
+			);
+			await persistStatus(status);
+			return;
+		}
 		if (
 			typeof tabId === 'number' &&
 			hiddenCaptureRegistry.reject(

@@ -280,6 +280,7 @@ export {
 	MANAGED_BY,
 	createManagedCalendar,
 	findManagedCalendars,
+	isGoogleCalendarAuthError,
 	toGoogleEventResource,
 	type GoogleCalendarResource,
 	type GoogleEventResource

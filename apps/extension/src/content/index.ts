@@ -1,4 +1,4 @@
-import { extractMyBkTableFromDocument } from './extract.ts';
+import { extractTimetableFromDocument, isLikelyExpiredSession } from './extract.ts';
 import { createDebouncedTask } from './observe.ts';
 import type { ContentMessage } from '../shared/messages.ts';
 
@@ -41,12 +41,23 @@ window.addEventListener(
 
 async function captureCurrentPage(): Promise<void> {
 	try {
-		const capture = extractMyBkTableFromDocument(document);
+		const capture = extractTimetableFromDocument(document);
 		const signature = JSON.stringify(capture);
 		if (signature === lastResultSignature) return;
 		lastResultSignature = signature;
 		await sendMessage({ type: 'bkalendar:capture', capture });
 	} catch (error) {
+		if (isLikelyExpiredSession(document)) {
+			const signature = 'session-expired';
+			if (signature === lastResultSignature) return;
+			lastResultSignature = signature;
+			await sendMessage({
+				type: 'bkalendar:session-expired',
+				reason: error instanceof Error ? error.message : 'expired-session'
+			});
+			return;
+		}
+		if (!shouldReportCaptureError()) return;
 		const signature = 'capture-error';
 		if (signature === lastResultSignature) return;
 		lastResultSignature = signature;
@@ -55,6 +66,17 @@ async function captureCurrentPage(): Promise<void> {
 			reason: error instanceof Error ? error.message : 'unknown-capture-error'
 		});
 	}
+}
+
+function shouldReportCaptureError(): boolean {
+	const url = new URL(window.location.href);
+	if (url.hostname === 'mybk.hcmut.edu.vn') {
+		return url.pathname.includes('/he-thong-quan-ly/sinh-vien/tkb');
+	}
+	// These portals render a login/dashboard shell before the timetable table.
+	// Let the hidden capture timeout or a later mutation decide instead of
+	// treating the first shell render as a failed timetable.
+	return false;
 }
 
 async function sendMessage(message: ContentMessage): Promise<void> {

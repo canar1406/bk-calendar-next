@@ -103,7 +103,8 @@ html[data-theme='dark'] .theme-switcher option {
 }
 
 button,
-textarea {
+textarea,
+select {
 	font: inherit;
 }
 
@@ -114,7 +115,8 @@ a {
 
 button:focus-visible,
 a:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+select:focus-visible {
 	outline: 3px solid rgba(20, 184, 166, 0.45);
 	outline-offset: 3px;
 }
@@ -570,6 +572,46 @@ html[data-theme='dark'] textarea {
 html[data-theme='dark'] textarea:focus-visible {
 	border-color: rgba(125, 200, 247, 0.72);
 	outline: 3px solid rgba(125, 200, 247, 0.14);
+}
+
+.source-kind-field {
+	display: grid;
+	gap: 7px;
+	margin-bottom: 18px;
+}
+
+.source-kind-field > span {
+	font-size: 0.78rem;
+	font-weight: 700;
+}
+
+.source-kind-field select {
+	width: min(520px, 100%);
+	min-height: 44px;
+	padding: 0 13px;
+	color: var(--ink);
+	border: 1px solid var(--line-strong);
+	border-radius: 10px;
+	background: var(--surface);
+}
+
+.source-kind-field small {
+	color: var(--muted);
+	font-size: 0.7rem;
+	line-height: 1.5;
+}
+
+.source-kind-current {
+	margin: -6px 0 10px;
+	color: var(--blue);
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 0.68rem;
+}
+
+html[data-theme='dark'] .source-kind-field select {
+	color: var(--ink);
+	border-color: rgba(148, 163, 184, 0.42);
+	background: rgba(5, 11, 20, 0.52);
 }
 
 html[data-theme='dark'] .form-footer {

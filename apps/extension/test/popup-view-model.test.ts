@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
 	buildStoredDiffDetails,
+	buildFallbackDiffDetails,
 	buildPopupViewModel,
 	selectCurrentProfile,
 	summarizeStoredProfiles,
@@ -24,6 +25,7 @@ const capturedStatus: ExtensionStatus = {
 
 const currentProfile: StoredProfileSummary = {
 	profileId: 'student-2024:261',
+	sourceKind: 'student-2024',
 	semester: 261,
 	calendarName: 'BKalendar • HK 261',
 	lastCheckedAt: '2026-09-03T01:00:00.000Z',
@@ -112,6 +114,41 @@ describe('extension popup view model', () => {
 		assert.match(details[2]?.title ?? '', /AS1001/);
 	});
 
+	it('does not show a stored diff from a different selected timetable source', () => {
+		const studentLog = {
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			outcome: 'applied',
+			createdAt: '2026-09-04T03:00:00.000Z',
+			details: [
+				{
+					kind: 'changed',
+					courseCode: 'MT1003',
+					title: 'MT1003 · Giải tích 1',
+					description: 'Phòng đã thay đổi'
+				}
+			]
+		};
+
+		assert.equal(buildStoredDiffDetails([], studentLog, 'lecturer').length, 0);
+		assert.equal(buildStoredDiffDetails([], studentLog, 'student-2024').length, 1);
+	});
+
+	it('provides a visible fallback when an applied update has counts but no itemized diff log', () => {
+		const details = buildFallbackDiffDetails({
+			state: 'captured',
+			capturedAt: '2026-09-05T00:00:00.000Z',
+			completeness: { state: 'complete', parsedRows: 8, expectedRows: 8 },
+			changes: { added: 0, changed: 4, removed: 0, unchanged: 4, canDelete: true },
+			syncState: 'applied'
+		});
+
+		assert.equal(details.length, 1);
+		assert.equal(details[0]?.kind, 'changed');
+		assert.match(details[0]?.title ?? '', /Google Calendar/);
+		assert.match(details[0]?.description ?? '', /4/);
+	});
+
 	it('extracts only safe display fields from persisted profiles', () => {
 		const profiles = summarizeStoredProfiles([
 			{
@@ -130,6 +167,7 @@ describe('extension popup view model', () => {
 		assert.deepEqual(profiles, [
 			{
 				profileId: 'student-2024:261',
+				sourceKind: 'student-2024',
 				semester: 261,
 				calendarName: 'BKalendar • HK 261',
 				lastCheckedAt: '2026-09-03T01:00:00.000Z',
@@ -171,6 +209,7 @@ describe('extension popup view model', () => {
 		const selected = selectCurrentProfile([
 			{
 				profileId: 'student-2024:252',
+				sourceKind: 'student-2024',
 				semester: 252,
 				calendarName: 'BKalendar • HK 252',
 				lastCheckedAt: '2026-08-20T01:00:00.000Z',
@@ -180,6 +219,50 @@ describe('extension popup view model', () => {
 		]);
 
 		assert.deepEqual(selected, currentProfile);
+	});
+
+	it('selects only profiles belonging to the timetable source currently shown', () => {
+		const lecturerProfile: StoredProfileSummary = {
+			profileId: 'lecturer:261',
+			sourceKind: 'lecturer',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			lastCheckedAt: '2026-09-04T03:00:00.000Z',
+			pendingEventCount: 7
+		};
+
+		assert.deepEqual(
+			selectCurrentProfile([currentProfile, lecturerProfile], 'student-2024'),
+			currentProfile
+		);
+		assert.deepEqual(
+			selectCurrentProfile([currentProfile, lecturerProfile], 'lecturer'),
+			lecturerProfile
+		);
+		assert.equal(selectCurrentProfile([currentProfile], 'postgraduate'), undefined);
+	});
+
+	it('shows a normal tracking state for every configured timetable source', () => {
+		const lecturerProfile: StoredProfileSummary = {
+			profileId: 'lecturer:261',
+			sourceKind: 'lecturer',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			lastCheckedAt: '2026-09-04T03:00:00.000Z',
+			pendingEventCount: 7
+		};
+		const withProfile = buildPopupViewModel(
+			capturedStatus,
+			lecturerProfile,
+			true,
+			'review',
+			false,
+			'lecturer'
+		);
+
+		assert.equal(withProfile.title, '4 thay đổi cần xem lại');
+		assert.equal(withProfile.profileLabel, 'Học kỳ 261 · 7 buổi học');
+		assert.equal(withProfile.actionKind, 'open-web-review');
 	});
 
 	it('presents persisted change counts as a local review summary', () => {

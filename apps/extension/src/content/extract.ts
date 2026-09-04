@@ -1,3 +1,5 @@
+import type { SourceKind } from '../../../../packages/timetable/src/index.ts';
+
 export type CaptureCompleteness =
 	| { state: 'complete'; parsedRows: number; expectedRows: number }
 	| { state: 'incomplete'; parsedRows: number; expectedRows: number }
@@ -5,6 +7,7 @@ export type CaptureCompleteness =
 
 export interface MyBkCapture {
 	raw: string;
+	sourceKind?: SourceKind;
 	sourceUpdatedAt?: string;
 	completeness: CaptureCompleteness;
 }
@@ -25,6 +28,17 @@ const EXPECTED_HEADERS = [
 ];
 
 export function extractMyBkTableFromDocument(source: Document | string): MyBkCapture {
+	const capture = extractTimetableFromDocument(source, 'student-2024');
+	if (capture.sourceKind !== 'student-2024') {
+		throw new Error('Trang hiện tại không phải bảng thời khóa biểu sinh viên MyBK mới.');
+	}
+	return capture;
+}
+
+export function extractTimetableFromDocument(
+	source: Document | string,
+	requestedSourceKind: SourceKind | 'auto' = 'auto'
+): MyBkCapture & { sourceKind: SourceKind } {
 	const html = typeof source === 'string' ? source : source.documentElement.outerHTML;
 	const text = decodeHtml(stripTags(html));
 	const tables = [...html.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)];
@@ -33,41 +47,137 @@ export function extractMyBkTableFromDocument(source: Document | string): MyBkCap
 		const rows = parseRows(table[1] ?? '');
 		if (rows.length < 2) continue;
 		const headers = rows[0]?.map(normalize) ?? [];
-		const headerIndexes = EXPECTED_HEADERS.map((header) =>
+		const sourceKind = detectSourceKind(headers);
+		if (!sourceKind || (requestedSourceKind !== 'auto' && sourceKind !== requestedSourceKind)) {
+			continue;
+		}
+		const headerIndexes = SOURCE_HEADERS[sourceKind].map((header) =>
 			headers.findIndex((value) => matchesHeader(value, header))
 		);
-		if (headerIndexes.some((index) => index < 0)) continue;
 		const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell.trim() !== ''));
-		const canonicalHeader = EXPECTED_HEADERS.map(toDisplayHeader);
 		const canonicalRows = dataRows.map((row) => headerIndexes.map((index) => row[index] ?? ''));
-		const sourceUpdatedAt = parseUpdatedAt(text);
-		const completeness = parseCompleteness(text, canonicalRows.length);
-		const prefix = [
-			`${canonicalRows[0]?.[0] ?? ''} - ${semesterLabel(canonicalRows[0]?.[0] ?? '')}`,
-			sourceUpdatedAt
-				? `Ngày cập nhật gần nhất của HK này: ${toVietnameseTimestamp(sourceUpdatedAt)}`
-				: '',
-			'Trình bày',
-			String(canonicalRows.length),
-			' dòng/trang',
-			'Tìm kiếm:'
-		].filter(Boolean);
+		const sourceUpdatedAt = sourceKind === 'student-2024' ? parseUpdatedAt(text) : undefined;
+		const completeness = parseCompleteness(text, canonicalRows.length, sourceKind);
 
 		return {
+			sourceKind,
 			raw: [
-				...prefix,
-				canonicalHeader.join('\t'),
+				...buildPrefix(sourceKind, text, canonicalRows),
+				SOURCE_HEADERS[sourceKind].map(toDisplayHeader).join('\t'),
 				...canonicalRows.map((row) => row.join('\t')),
-				`Trình bày từ dòng 1 đến ${canonicalRows.length} / ${expectedCount(completeness)} dòng`
-			].join('\n'),
+				completenessFooter(sourceKind, canonicalRows.length, completeness)
+			]
+				.join('\n')
+				.trim(),
 			...(sourceUpdatedAt ? { sourceUpdatedAt } : {}),
 			completeness
 		};
 	}
 
 	throw new Error(
-		'Không tìm thấy bảng thời khóa biểu MyBK. Hãy mở mục Thời khóa biểu và đăng nhập lại nếu cần.'
+		'Không tìm thấy bảng thời khóa biểu của nguồn đã chọn. Hãy mở đúng trang lịch và đăng nhập lại nếu cần.'
 	);
+}
+
+export function isLikelyExpiredSession(source: Document | string): boolean {
+	const html = typeof source === 'string' ? source : source.documentElement.outerHTML;
+	if (/<table\b[^>]*>/iu.test(html)) return false;
+	const text = decodeHtml(stripTags(html));
+	return /phiên(?: đăng nhập)?[^.]{0,80}(?:hết hạn|expired)|session[^.]{0,80}expired|token[^.]{0,80}(?:hết hạn|expired)|\b(?:đăng nhập|login|cas)\b/iu.test(
+		text
+	);
+}
+
+const SOURCE_HEADERS: Record<SourceKind, string[]> = {
+	'student-2024': EXPECTED_HEADERS,
+	'student-legacy': [
+		'mã mh',
+		'tên môn học',
+		'tín chỉ',
+		'tc học phí',
+		'nhóm-tổ',
+		'thứ',
+		'tiết',
+		'giờ học',
+		'phòng',
+		'cơ sở',
+		'tuần học'
+	],
+	lecturer: ['lớp', 'tên mh', 'phòng', 'dãy', 'thứ', 'số tiết', 'tiết', 'giờ', 'tuần học', '% nd'],
+	postgraduate: [
+		'cán bộ giảng dạy',
+		'môn học',
+		'lớp/ds lớp',
+		'thứ',
+		'tiết bắt đầu',
+		'tiết kết thúc',
+		'phòng',
+		'tuần',
+		'ghi chú'
+	]
+};
+
+function detectSourceKind(headers: string[]): SourceKind | undefined {
+	return (Object.keys(SOURCE_HEADERS) as SourceKind[]).find((sourceKind) =>
+		SOURCE_HEADERS[sourceKind].every((header) =>
+			headers.some((value) => matchesHeader(value, header))
+		)
+	);
+}
+
+function buildPrefix(sourceKind: SourceKind, text: string, rows: string[][]): string[] {
+	switch (sourceKind) {
+		case 'student-2024': {
+			const sourceUpdatedAt = parseUpdatedAt(text);
+			return [
+				`${rows[0]?.[0] ?? ''} - ${semesterLabel(rows[0]?.[0] ?? '')}`,
+				sourceUpdatedAt
+					? `Ngày cập nhật gần nhất của HK này: ${toVietnameseTimestamp(sourceUpdatedAt)}`
+					: '',
+				'Trình bày',
+				String(rows.length),
+				' dòng/trang',
+				'Tìm kiếm:'
+			].filter(Boolean);
+		}
+		case 'student-legacy': {
+			const semester = text.match(/Học kỳ\s+([123])\s+Năm học\s+(\d{4})\s*-\s*(\d{4})/iu);
+			if (!semester) throw new Error('Không tìm thấy học kỳ của lịch sinh viên cũ.');
+			return [`Học kỳ ${semester[1]} Năm học ${semester[2]} - ${semester[3]}`, 'Ngày cập nhật:'];
+		}
+		case 'lecturer': {
+			const year = text.match(/Năm học\s+(\d{4})/iu)?.[1];
+			const term = text.match(/Học kỳ\s+([123])/iu)?.[1];
+			if (!year || !term) throw new Error('Không tìm thấy học kỳ của lịch giảng viên.');
+			return [`Năm học ${year}`, `Học kỳ ${term}`];
+		}
+		case 'postgraduate': {
+			const semester = text.match(
+				/Học kỳ\s+([123])\/(\d{4})-(\d{4}):\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*\(Tuần\s+\d+\)/iu
+			);
+			if (!semester) throw new Error('Không tìm thấy học kỳ của lịch sau đại học.');
+			return [
+				`Học kỳ ${semester[1]}/${semester[2]}-${semester[3]}: ${semester[4]} (Tuần 1)`,
+				'',
+				'',
+				''
+			];
+		}
+	}
+}
+
+function completenessFooter(
+	sourceKind: SourceKind,
+	parsedRows: number,
+	completeness: CaptureCompleteness
+): string {
+	if (sourceKind === 'student-2024') {
+		return `Trình bày từ dòng 1 đến ${parsedRows} / ${expectedCount(completeness)} dòng`;
+	}
+	if (sourceKind === 'lecturer' && completeness.state !== 'unknown') {
+		return `Đang xem 1 đến ${parsedRows} trong tổng số ${completeness.expectedRows} mục`;
+	}
+	return '';
 }
 
 function parseRows(tableHtml: string): string[][] {
@@ -124,8 +234,19 @@ function parseUpdatedAt(text: string): string | undefined {
 	return `${year}-${month!.padStart(2, '0')}-${day!.padStart(2, '0')}T${hour!.padStart(2, '0')}:${minute}:${second}+07:00`;
 }
 
-function parseCompleteness(text: string, parsedRows: number): CaptureCompleteness {
-	const match = text.match(/Trình bày từ dòng\s+\d+\s+đến\s+\d+\s*\/\s*(\d+)\s+dòng/i);
+function parseCompleteness(
+	text: string,
+	parsedRows: number,
+	sourceKind: SourceKind
+): CaptureCompleteness {
+	if (sourceKind !== 'student-2024' && sourceKind !== 'lecturer') {
+		return { state: 'unknown', parsedRows };
+	}
+	const pattern =
+		sourceKind === 'lecturer'
+			? /Đang xem\s+\d+\s+đến\s+\d+\s+trong tổng số\s+(\d+)\s+mục/iu
+			: /Trình bày từ dòng\s+\d+\s+đến\s+\d+\s*\/\s*(\d+)\s+dòng/iu;
+	const match = text.match(pattern);
 	if (!match) return { state: 'unknown', parsedRows };
 	const expectedRows = Number(match[1]);
 	return parsedRows >= expectedRows

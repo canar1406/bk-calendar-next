@@ -69,4 +69,28 @@ describe('extension capture workflow', () => {
 		assert.equal(firstSemester?.pendingSnapshot?.semester, 261);
 		assert.equal(secondSemester?.pendingSnapshot?.semester, 262);
 	});
+
+	it('stages a non-current timetable source under its own source profile', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const staged = await stageMyBkCapture(
+			store,
+			{
+				sourceKind: 'lecturer',
+				raw: `Năm học 2022
+Học kỳ 1
+Lớp\tTên MH\tPhòng\tDãy\tThứ\tSố tiết\tTiết\tGiờ\tTuần học\t% ND
+20221_CO1006_L11\tNhập môn điện toán\tH6-707\tH6\t5\t5\t7-11\t12:00 - 16:50\t--|43|\t0%
+Đang xem 1 đến 1 trong tổng số 1 mục`,
+				completeness: { state: 'complete', parsedRows: 1, expectedRows: 1 }
+			},
+			'2026-09-04T01:00:00.000Z'
+		);
+
+		assert.equal(staged.snapshot.sourceKind, 'lecturer');
+		assert.equal(staged.snapshot.semester, 221);
+		assert.equal(
+			(await store.get('lecturer:221'))?.pendingSnapshot?.events[0]?.courseCode,
+			'CO1006'
+		);
+	});
 });

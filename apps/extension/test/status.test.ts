@@ -97,4 +97,18 @@ describe('extension capture status', () => {
 		assert.equal(status.syncState, 'applied');
 		assert.equal(JSON.stringify(status).includes(capture.raw), false);
 	});
+
+	it('keeps the source kind in a captured status so the popup cannot show another source as current', () => {
+		const status = createCaptureStatus(
+			{
+				raw: 'safe',
+				sourceKind: 'lecturer',
+				completeness: { state: 'complete', parsedRows: 1, expectedRows: 1 }
+			},
+			'2026-09-04T01:00:00.000Z'
+		);
+
+		assert.equal(status.state, 'captured');
+		assert.equal(status.sourceKind, 'lecturer');
+	});
 });
