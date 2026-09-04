@@ -13,11 +13,21 @@ describe('semester schedule week view', () => {
 
 		assert.match(component, /Lịch học cả học kỳ/);
 		assert.match(component, /Xem trước theo từng tuần/);
-		assert.match(component, /<label[^>]+for="schedule-week"/);
-		assert.match(component, /<select[^>]+id="schedule-week"/);
+		assert.match(component, /<details[^>]+class="week-picker"/);
+		assert.match(component, /<summary[^>]+aria-label="Chọn tuần hiển thị"/);
+		assert.match(component, /role="listbox"/);
+		assert.match(component, /role="option"/);
+		assert.match(component, /aria-selected=/);
+		assert.doesNotMatch(component, /<select[^>]+id="schedule-week"/);
 		assert.match(component, /aria-label="Xem tuần trước"/);
 		assert.match(component, /aria-label="Xem tuần sau"/);
 		assert.doesNotMatch(component, /var\(--navy\)/);
+		assert.doesNotMatch(
+			component,
+			/\.week-navigation button,[\s\S]*?\.week-picker select[\s\S]*?background:\s*white/
+		);
+		assert.match(component, /\.week-menu-panel[\s\S]*background:\s*var\(--surface-raised\)/);
+		assert.match(component, /\.week-menu-option\[aria-selected='true'\]/);
 	});
 
 	it('shows only active occurrences in each selected week', async () => {
