@@ -6,11 +6,13 @@ describe('automatic course appearance tracking', () => {
 	it('patches presentation directly after a web appearance save', async () => {
 		const source = await readFile(new URL('../src/background/index.ts', import.meta.url), 'utf8');
 
-		assert.match(source, /await syncCourseAppearanceToGoogle\(profileId\)/);
+		assert.match(source, /await queueCourseAppearanceSync\(profileId\)/);
 		assert.doesNotMatch(source, /void syncCourseAppearanceToGoogle\(profileId\)/);
 		assert.match(source, /syncManagedPresentation/);
 		assert.match(source, /prepareEventsWithCourseAppearance/);
 		assert.match(source, /if \(\(await readTrackingMode\(\)\) !== 'auto-safe'\) return/);
+		assert.match(source, /Object\.keys\(changes\)\.filter\(isCourseAppearanceStorageKey\)/);
+		assert.match(source, /queueCourseAppearanceSync/);
 	});
 
 	it('does not publish appearance again while hydrating extension state in the web app', async () => {

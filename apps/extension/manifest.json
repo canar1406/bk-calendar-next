@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "BKalendar Next",
-	"version": "0.4.5",
+	"version": "0.4.6",
 	"description": "Đọc thời khóa biểu MyBK cục bộ và báo trạng thái để bạn chủ động xem lại.",
 	"permissions": ["storage", "alarms", "notifications", "identity", "scripting"],
 	"host_permissions": [

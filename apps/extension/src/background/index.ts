@@ -64,8 +64,12 @@ import { ensureWebBridgeConnection, WEB_APP_URL_PATTERN } from './web-bridge-pre
 const TRACKING_ALARM = 'bkalendar-next:track-mybk';
 const TRACKING_MODE_KEY = 'bkalendar-next:tracking-mode';
 const POLLING_INTERVAL_KEY = 'bkalendar-next:polling-interval-minutes';
+const COURSE_APPEARANCE_STORAGE_PREFIX = 'bkalendar-next:course-colors:';
 const DEFAULT_TRACKING_MODE: TrackingMode = 'review';
 let activeTrackingRun: Promise<void> | undefined;
+const appearanceSyncRuns = new Map<string, Promise<void>>();
+const appearanceWritesInFlight = new Set<string>();
+const recentAppearanceSyncs = new Map<string, { fingerprint: string; completedAt: number }>();
 const hiddenCaptureRegistry = createHiddenCaptureRegistry();
 const googleTokenStore = createGoogleTokenStore(
 	selectTokenStorageArea(chrome.storage.session, createMemoryTokenStorageArea())
@@ -115,6 +119,11 @@ chrome.notifications.onClicked.addListener((notificationId) => {
 chrome.storage.onChanged.addListener((changes, areaName) => {
 	if (areaName !== 'local') return;
 	if (hasWebStateChange(changes)) void broadcastWebState();
+	for (const key of Object.keys(changes).filter(isCourseAppearanceStorageKey)) {
+		const profileId = key.slice(COURSE_APPEARANCE_STORAGE_PREFIX.length);
+		if (appearanceWritesInFlight.delete(profileId)) continue;
+		void queueCourseAppearanceSync(profileId);
+	}
 });
 
 void hardenLocalStorage();
@@ -159,10 +168,15 @@ async function handleWebBridgeRuntimeMessage(
 			await store.save(profile);
 		},
 		async saveAppearance(profileId, preferences) {
-			await chrome.storage.local.set({
-				[courseColorStorageKey(profileId)]: preferences
-			});
-			await syncCourseAppearanceToGoogle(profileId);
+			appearanceWritesInFlight.add(profileId);
+			try {
+				await chrome.storage.local.set({
+					[courseColorStorageKey(profileId)]: preferences
+				});
+				await queueCourseAppearanceSync(profileId);
+			} finally {
+				setTimeout(() => appearanceWritesInFlight.delete(profileId), 1_000);
+			}
 		}
 	});
 	if (!result.handled) throw new Error('Web BKalendar không được phép truy cập bridge.');
@@ -185,6 +199,20 @@ function hasWebStateChange(changes: Record<string, chrome.storage.StorageChange>
 		changes[EXTENSION_STATUS_KEY] !== undefined ||
 		Object.keys(changes).some((key) => key.startsWith('bkalendar-next:course-colors:'))
 	);
+}
+
+function isCourseAppearanceStorageKey(key: string): boolean {
+	return key.startsWith(COURSE_APPEARANCE_STORAGE_PREFIX);
+}
+
+function queueCourseAppearanceSync(profileId: string): Promise<void> {
+	const existing = appearanceSyncRuns.get(profileId);
+	if (existing) return existing;
+	const run = syncCourseAppearanceToGoogle(profileId).finally(() => {
+		if (appearanceSyncRuns.get(profileId) === run) appearanceSyncRuns.delete(profileId);
+	});
+	appearanceSyncRuns.set(profileId, run);
+	return run;
 }
 
 async function broadcastWebState(): Promise<void> {
@@ -214,6 +242,11 @@ async function syncCourseAppearanceToGoogle(profileId: string): Promise<void> {
 	const appearance = await chrome.storage.local.get(courseColorStorageKey(profileId));
 	const preferences = appearance[courseColorStorageKey(profileId)];
 	if (!isCourseColorPreferences(preferences)) return;
+	const fingerprint = JSON.stringify(preferences);
+	const recent = recentAppearanceSyncs.get(profileId);
+	if (recent && recent.fingerprint === fingerprint && Date.now() - recent.completedAt < 1_500) {
+		return;
+	}
 
 	try {
 		const accessToken = await requestGoogleToken(
@@ -230,6 +263,7 @@ async function syncCourseAppearanceToGoogle(profileId: string): Promise<void> {
 		if (result.failed.length > 0) {
 			throw new Error('Google Calendar chưa áp dụng đầy đủ màu và icon môn học.');
 		}
+		recentAppearanceSyncs.set(profileId, { fingerprint, completedAt: Date.now() });
 		if (result.patched === 0) return;
 
 		const now = new Date().toISOString();
