@@ -145,6 +145,41 @@ describe('background MyBK CAS client', () => {
 		assert.match(formBody, /execution=e1s1/);
 	});
 
+	it('accepts a CAS form when Edge reports the redirect response under the MyBK URL', async () => {
+		const client = new ScriptedClient([
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
+				status: 200,
+				body: myBkLoginHtml
+			},
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/login?type=cas',
+				status: 200,
+				body: casLoginHtml.replace(
+					'action="/cas/login',
+					'action="https://sso.hcmut.edu.vn/cas/login'
+				)
+			},
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/',
+				status: 200,
+				body: '<html>Đăng nhập thành công</html>'
+			},
+			{
+				url: 'https://mybk.hcmut.edu.vn/app/he-thong-quan-ly/sinh-vien/tkb',
+				status: 200,
+				body: timetableHtml
+			}
+		]);
+
+		const capture = await fetchMyBkTimetable(client, {
+			username: 'student',
+			password: 'secret'
+		});
+
+		assert.match(capture.raw, /AS1002/);
+	});
+
 	it('falls back to the direct HTTPS CAS entry when MyBK emits an insecure login redirect', async () => {
 		const client = new InitialFailureClient([
 			{

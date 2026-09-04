@@ -159,6 +159,26 @@ Cần tạo OAuth client trong Google Cloud và bật Google Calendar API. Tài 
 Gmail thông thường và tài khoản Google Workspace HCMUT sử dụng chung màn hình
 chọn tài khoản; không giới hạn bằng hosted domain.
 
+Khi dùng bản extension unpacked hiện tại trên Edge/Chrome, OAuth client loại
+**Web application** dùng cho luồng đăng nhập extension phải có Authorized
+redirect URI:
+
+```text
+https://bmpehgpialackfeihijielalbcbcbk.chromiumapp.org/
+```
+
+Đây là redirect URI tương ứng với extension ID của bản phát hành hiện tại.
+Nếu cài một bản extension có ID khác, mở `chrome://extensions` hoặc
+`edge://extensions`, xem ID của extension rồi dùng:
+
+```text
+https://<EXTENSION_ID>.chromiumapp.org/
+```
+
+Không thêm dấu cách hoặc bỏ dấu `/` cuối URI. Nếu URI chưa được khai báo,
+Google sẽ trả lỗi `redirect_uri_mismatch` và nút **Kết nối** sẽ không thể hoàn
+tất.
+
 Sao chép `.env.example` thành `.env`, sau đó thay client ID mẫu:
 
 ```bash

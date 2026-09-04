@@ -97,13 +97,12 @@ function parseCasLoginForm(response: MyBkHttpResponse): {
 	action: string;
 	hiddenFields: Record<string, string>;
 } {
-	if (!isCasLogin(response)) {
-		throw new Error('MyBK không chuyển đến trang đăng nhập HCMUT CAS.');
-	}
 	const formMatch = response.body.match(
 		/<form\b[^>]*\bid=["']fm1["'][^>]*\baction=["']([^"']+)["'][^>]*>([\s\S]*?)<\/form>/iu
 	);
-	if (!formMatch) throw new Error('Không đọc được biểu mẫu đăng nhập HCMUT CAS.');
+	if (!formMatch || (!isCasLogin(response) && !looksLikeCasForm(formMatch[2] ?? ''))) {
+		throw new Error('MyBK không chuyển đến trang đăng nhập HCMUT CAS.');
+	}
 	const hiddenFields: Record<string, string> = {};
 	for (const input of (formMatch[2] ?? '').matchAll(/<input\b([^>]+)>/giu)) {
 		const attributes = input[1] ?? '';
@@ -112,10 +111,27 @@ function parseCasLoginForm(response: MyBkHttpResponse): {
 		if (!name) continue;
 		hiddenFields[name] = attribute(attributes, 'value') ?? '';
 	}
+	const actionUrl = new URL(decodeHtml(formMatch[1] ?? ''), response.url);
+	if (actionUrl.hostname !== 'sso.hcmut.edu.vn') {
+		if (actionUrl.pathname.startsWith('/cas/login') && looksLikeCasForm(formMatch[2] ?? '')) {
+			actionUrl.protocol = 'https:';
+			actionUrl.hostname = 'sso.hcmut.edu.vn';
+		} else {
+			throw new Error('Biểu mẫu đăng nhập MyBK không hợp lệ.');
+		}
+	}
 	return {
-		action: new URL(decodeHtml(formMatch[1] ?? ''), response.url).href,
+		action: actionUrl.href,
 		hiddenFields
 	};
+}
+
+function looksLikeCasForm(html: string): boolean {
+	return (
+		/\bname=["']lt["']/iu.test(html) &&
+		/\bname=["']execution["']/iu.test(html) &&
+		/\bname=["']password["']/iu.test(html)
+	);
 }
 
 function attribute(source: string, name: string): string | undefined {

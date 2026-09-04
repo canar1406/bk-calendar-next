@@ -108,6 +108,30 @@ describe('cross-browser extension Google OAuth', () => {
 		);
 	});
 
+	it('explains a Google OAuth redirect URI configuration failure', async () => {
+		const identity: ExtensionIdentityApi = {
+			async getAuthToken() {
+				return {};
+			},
+			getRedirectURL() {
+				return 'https://bmpehgpialackfeihijielalbcbcbk.chromiumapp.org/';
+			},
+			async launchWebAuthFlow() {
+				return 'https://accounts.google.com/signin/oauth/error?authError=redirect_uri_mismatch';
+			}
+		};
+
+		await assert.rejects(
+			() => requestGoogleToken(identity, true, webClientId),
+			(error: unknown) => {
+				assert.ok(error instanceof Error);
+				assert.match(error.message, /Authorized redirect URI|redirect URI/i);
+				assert.match(error.message, /bmpehgpialackfeihijielalbcbcbk\.chromiumapp\.org/);
+				return true;
+			}
+		);
+	});
+
 	it('removes a Chrome-cached token without persisting web-flow tokens', async () => {
 		let removed = '';
 		const identity: ExtensionIdentityApi = {

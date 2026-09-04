@@ -85,6 +85,14 @@ async function requestWebFlowToken(
 		throw new Error('Hãy mở BKalendar và chọn Kết nối Google Calendar.');
 	}
 	const redirected = new URL(responseUrl);
+	if (
+		redirected.hostname === 'accounts.google.com' &&
+		redirected.pathname.startsWith('/signin/oauth/error')
+	) {
+		throw new Error(
+			`Google OAuth từ chối redirect URI. Hãy thêm Authorized redirect URI sau vào Google Cloud: ${redirectUri}`
+		);
+	}
 	const params = new URLSearchParams(redirected.hash.slice(1) || redirected.search.slice(1));
 	if (params.get('state') !== state) throw new Error('Phản hồi Google OAuth không hợp lệ.');
 	const error = params.get('error');
