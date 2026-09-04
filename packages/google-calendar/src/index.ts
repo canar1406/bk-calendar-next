@@ -208,6 +208,7 @@ export {
 	isCourseAppearanceTransferMessage,
 	isCourseColorPreferences,
 	normalizeCourseColorPreferences,
+	randomizeCourseColors,
 	type CourseAppearanceTransferMessage,
 	type CourseColorMode,
 	type CourseColorPalette,

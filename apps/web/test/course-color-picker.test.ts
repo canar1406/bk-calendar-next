@@ -12,7 +12,7 @@ describe('course color picker UI', () => {
 		assert.match(source, /Màu môn học/);
 		assert.match(source, /Một màu/);
 		assert.match(source, /Mỗi môn một màu/);
-		assert.match(source, /Đổi bảng màu/);
+		assert.match(source, /Ngẫu nhiên/);
 		assert.match(source, /Chọn bảng phối/);
 		assert.match(source, /Google hỗ trợ 11 màu sự kiện/);
 		assert.match(source, /palette-library/);

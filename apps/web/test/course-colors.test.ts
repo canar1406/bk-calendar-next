@@ -9,6 +9,7 @@ import {
 	colorizeEventsForSync,
 	createCourseColorStore,
 	defaultCourseColorPreferences,
+	randomizeCourseColors,
 	type CourseColorPreferences
 } from '../src/lib/course-colors.ts';
 
@@ -71,6 +72,23 @@ describe('course color preferences', () => {
 		});
 
 		assert.notDeepEqual(first, second);
+	});
+
+	it('creates a true random per-course override while keeping every session stable', () => {
+		const preferences = randomizeCourseColors(
+			[event('MT1003'), event('MT1003', 1), event('PH1003'), event('LA1003')],
+			defaultCourseColorPreferences(),
+			() => 0
+		);
+
+		assert.equal(preferences.mode, 'course');
+		assert.deepEqual(Object.keys(preferences.overrides).sort(), ['LA1003', 'MT1003', 'PH1003']);
+		assert.equal(new Set(Object.values(preferences.overrides)).size, 3);
+		assert.ok(
+			Object.values(preferences.overrides).every((colorId) =>
+				GOOGLE_EVENT_COLORS.some((color) => color.id === colorId)
+			)
+		);
 	});
 
 	it('honors individual course colors and monochrome mode', () => {

@@ -7,6 +7,7 @@
 		buildCourseColorAssignments,
 		colorForId,
 		courseIdentity,
+		randomizeCourseColors,
 		type CourseColorMode,
 		type CourseColorPreferences
 	} from '../course-colors.ts';
@@ -48,12 +49,7 @@
 	}
 
 	function reroll(): void {
-		update({
-			...preferences,
-			mode: 'course',
-			seed: preferences.seed + 1,
-			overrides: {}
-		});
+		update(randomizeCourseColors(events, preferences));
 	}
 
 	function selectPalette(index: number, event: MouseEvent): void {
@@ -128,7 +124,12 @@
 		</div>
 		{#if preferences.mode === 'course'}
 			<div class="palette-actions">
-				<button class="reroll-button" type="button" on:click={reroll}>Đổi bảng màu</button>
+				<button
+					class="reroll-button"
+					type="button"
+					title="Xáo ngẫu nhiên màu của từng môn"
+					on:click={reroll}>🎲 Ngẫu nhiên</button
+				>
 				<details class="palette-library">
 					<summary>Chọn bảng phối</summary>
 					<div class="palette-library-panel">
@@ -137,7 +138,8 @@
 							{#each COURSE_COLOR_PALETTES as palette, index}
 								<button
 									type="button"
-									class:selected={palette.id === currentPalette.id}
+									class:selected={Object.keys(preferences.overrides).length === 0 &&
+										palette.id === currentPalette.id}
 									on:click={(event) => selectPalette(index, event)}
 								>
 									<span class="palette-preview" aria-hidden="true">

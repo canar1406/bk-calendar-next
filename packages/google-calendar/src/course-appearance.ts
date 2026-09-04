@@ -373,6 +373,29 @@ export function buildCourseColorAssignments(
 	);
 }
 
+export function randomizeCourseColors(
+	events: ManagedEvent[],
+	preferences: CourseColorPreferences,
+	random: () => number = Math.random
+): CourseColorPreferences {
+	const courses = [...new Set(events.map(courseIdentity))].sort((left, right) =>
+		left.localeCompare(right, 'vi')
+	);
+	const colorIds = GOOGLE_EVENT_COLORS.map((color) => color.id);
+	for (let index = colorIds.length - 1; index > 0; index -= 1) {
+		const sample = Math.min(Math.max(random(), 0), 1 - Number.EPSILON);
+		const swapIndex = Math.floor(sample * (index + 1));
+		[colorIds[index], colorIds[swapIndex]] = [colorIds[swapIndex]!, colorIds[index]!];
+	}
+	return {
+		...preferences,
+		mode: 'course',
+		overrides: Object.fromEntries(
+			courses.map((course, index) => [course, colorIds[index % colorIds.length]!])
+		)
+	};
+}
+
 export function colorizeEventsForSync(
 	events: ManagedEvent[],
 	assignments: Record<string, string>,
