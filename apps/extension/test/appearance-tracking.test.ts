@@ -6,7 +6,8 @@ describe('automatic course appearance tracking', () => {
 	it('patches presentation directly after a web appearance save', async () => {
 		const source = await readFile(new URL('../src/background/index.ts', import.meta.url), 'utf8');
 
-		assert.match(source, /void syncCourseAppearanceToGoogle\(profileId\)/);
+		assert.match(source, /await syncCourseAppearanceToGoogle\(profileId\)/);
+		assert.doesNotMatch(source, /void syncCourseAppearanceToGoogle\(profileId\)/);
 		assert.match(source, /syncManagedPresentation/);
 		assert.match(source, /prepareEventsWithCourseAppearance/);
 		assert.match(source, /if \(\(await readTrackingMode\(\)\) !== 'auto-safe'\) return/);

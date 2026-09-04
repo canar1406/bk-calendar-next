@@ -162,7 +162,7 @@ async function handleWebBridgeRuntimeMessage(
 			await chrome.storage.local.set({
 				[courseColorStorageKey(profileId)]: preferences
 			});
-			void syncCourseAppearanceToGoogle(profileId);
+			await syncCourseAppearanceToGoogle(profileId);
 		}
 	});
 	if (!result.handled) throw new Error('Web BKalendar không được phép truy cập bridge.');
