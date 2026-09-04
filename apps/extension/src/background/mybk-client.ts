@@ -17,12 +17,20 @@ export interface MyBkHttpClient {
 export function createFetchMyBkHttpClient(fetcher: typeof fetch = fetch): MyBkHttpClient {
 	return {
 		async request(url, init = {}) {
-			const response = await fetcher(url, {
-				...init,
-				credentials: 'include',
-				redirect: 'follow',
-				cache: 'no-store'
-			});
+			let response: Response;
+			try {
+				response = await fetcher(url, {
+					...init,
+					credentials: 'include',
+					redirect: 'follow',
+					cache: 'no-store'
+				});
+			} catch (cause) {
+				throw new Error(
+					'Không thể kết nối MyBK trong nền. Hãy cập nhật quyền extension rồi thử lại.',
+					{ cause }
+				);
+			}
 			return {
 				url: response.url,
 				status: response.status,

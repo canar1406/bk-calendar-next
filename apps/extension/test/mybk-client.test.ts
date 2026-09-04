@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+	createFetchMyBkHttpClient,
 	fetchMyBkTimetable,
 	type MyBkHttpClient,
 	type MyBkHttpResponse
@@ -61,6 +62,22 @@ class InitialFailureClient extends ScriptedClient {
 }
 
 describe('background MyBK CAS client', () => {
+	it('reports a background network failure without exposing the raw fetch error', async () => {
+		const client = createFetchMyBkHttpClient(async () => {
+			throw new TypeError('Failed to fetch');
+		});
+
+		await assert.rejects(
+			() => client.request('https://mybk.hcmut.edu.vn/app/login?type=cas'),
+			(error: unknown) => {
+				assert.ok(error instanceof Error);
+				assert.match(error.message, /không thể kết nối mybk trong nền/i);
+				assert.equal(error.message.includes('Failed to fetch'), false);
+				return true;
+			}
+		);
+	});
+
 	it('reuses an authenticated MyBK session without sending the password', async () => {
 		const client = new ScriptedClient([
 			{
