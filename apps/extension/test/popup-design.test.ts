@@ -69,6 +69,7 @@ describe('extension popup visual structure', () => {
 		assert.match(main, /SELECTED_SOURCE_KIND_KEY/);
 		assert.match(main, /selectCurrentProfile\(profiles,\s*selectedSourceKind\)/);
 		assert.match(main, /statusForSource/);
+		assert.match(main, /themePreference/);
 	});
 
 	it('shows whether the local bridge to the BKalendar website is active', async () => {

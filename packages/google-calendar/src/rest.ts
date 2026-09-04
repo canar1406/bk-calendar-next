@@ -116,6 +116,42 @@ export async function findManagedCalendars(
 	return calendars.sort((left, right) => left.id.localeCompare(right.id));
 }
 
+export async function findLegacyCalendars(
+	fetcher: typeof fetch,
+	accessToken: string,
+	sourceKind: ManagedEvent['sourceKind'],
+	semester: number
+): Promise<Array<{ id: string }>> {
+	const legacyName =
+		sourceKind === 'postgraduate'
+			? `SDH${semester}`
+			: sourceKind === 'lecturer'
+				? `GV${semester}`
+				: `SV${semester}`;
+	const query = new URLSearchParams({
+		minAccessRole: 'writer',
+		showDeleted: 'false',
+		showHidden: 'true',
+		maxResults: '250'
+	});
+	const response = await requestJson<{ items?: GoogleCalendarResource[] }>(
+		fetcher,
+		accessToken,
+		`${API_BASE}/users/me/calendarList?${query}`
+	);
+	return (response.items ?? [])
+		.filter(
+			(calendar) =>
+				calendar.id &&
+				calendar.id !== 'primary' &&
+				!calendar.primary &&
+				!calendar.deleted &&
+				calendar.summary === legacyName
+		)
+		.map((calendar) => ({ id: calendar.id }))
+		.sort((left, right) => left.id.localeCompare(right.id));
+}
+
 export class GoogleCalendarRestGateway implements GoogleCalendarGateway {
 	private readonly accessToken: string;
 	private readonly fetcher: typeof fetch;
@@ -126,15 +162,26 @@ export class GoogleCalendarRestGateway implements GoogleCalendarGateway {
 	}
 
 	async listManagedEvents(calendarId: string): Promise<ManagedGoogleEvent[]> {
+		return await this.listEvents(calendarId, true);
+	}
+
+	async listCalendarEvents(calendarId: string): Promise<ManagedGoogleEvent[]> {
+		return await this.listEvents(calendarId, false);
+	}
+
+	private async listEvents(
+		calendarId: string,
+		managedOnly: boolean
+	): Promise<ManagedGoogleEvent[]> {
 		const managed: ManagedGoogleEvent[] = [];
 		let pageToken: string | undefined;
 		do {
 			const query = new URLSearchParams({
 				singleEvents: 'false',
 				showDeleted: 'false',
-				maxResults: '2500',
-				privateExtendedProperty: `managedBy=${MANAGED_BY}`
+				maxResults: '2500'
 			});
+			if (managedOnly) query.set('privateExtendedProperty', `managedBy=${MANAGED_BY}`);
 			if (pageToken) query.set('pageToken', pageToken);
 			const response = await requestJson<{ items?: GoogleEventResource[]; nextPageToken?: string }>(
 				this.fetcher,
@@ -143,17 +190,24 @@ export class GoogleCalendarRestGateway implements GoogleCalendarGateway {
 			);
 			for (const item of response.items ?? []) {
 				const privateData = item.extendedProperties?.private;
-				if (!item.id || !privateData?.stableKey || !privateData.fingerprint) continue;
+				if (!item.id || (managedOnly && (!privateData?.stableKey || !privateData.fingerprint))) {
+					continue;
+				}
 				managed.push({
 					id: item.id,
 					...(item.etag ? { etag: item.etag } : {}),
-					stableKey: privateData.stableKey,
-					fingerprint: privateData.fingerprint,
-					...(privateData.sourceFingerprint
+					stableKey: privateData?.stableKey ?? `legacy:${item.id}`,
+					fingerprint: privateData?.fingerprint ?? `legacy:${item.id}`,
+					...(item.summary ? { summary: item.summary } : {}),
+					...(item.description ? { description: item.description } : {}),
+					...(item.location ? { location: item.location } : {}),
+					...(item.start?.dateTime ? { start: item.start.dateTime } : {}),
+					...(item.end?.dateTime ? { end: item.end.dateTime } : {}),
+					...(privateData?.sourceFingerprint
 						? { sourceFingerprint: privateData.sourceFingerprint }
 						: {}),
 					...(item.colorId ? { colorId: item.colorId } : {}),
-					...(privateData.courseIcon ? { icon: privateData.courseIcon } : {})
+					...(privateData?.courseIcon ? { icon: privateData.courseIcon } : {})
 				});
 			}
 			pageToken = response.nextPageToken;

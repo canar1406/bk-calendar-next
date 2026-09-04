@@ -6,6 +6,7 @@
 		THEME_STORAGE_KEY,
 		type ThemePreference
 	} from '$lib/theme.ts';
+	import { publishThemeToExtension } from '$lib/extension-handoff.ts';
 
 	let preference: ThemePreference = 'system';
 	let systemQuery: MediaQueryList | undefined;
@@ -14,14 +15,25 @@
 		preference = normalizeThemePreference(localStorage.getItem(THEME_STORAGE_KEY));
 		systemQuery = window.matchMedia('(prefers-color-scheme: dark)');
 		applyTheme(document.documentElement, preference, systemQuery.matches);
+		publishThemeToExtension(window, preference);
 
 		const handleSystemChange = (event: MediaQueryListEvent) => {
 			if (preference === 'system') {
 				applyTheme(document.documentElement, preference, event.matches);
 			}
 		};
+		const handleExtensionTheme = (event: Event) => {
+			const next = (event as CustomEvent<{ preference?: unknown }>).detail?.preference;
+			preference = normalizeThemePreference(next);
+			localStorage.setItem(THEME_STORAGE_KEY, preference);
+			applyTheme(document.documentElement, preference, systemQuery?.matches ?? false);
+		};
+		window.addEventListener('bkalendar:theme-updated', handleExtensionTheme);
 		systemQuery.addEventListener('change', handleSystemChange);
-		return () => systemQuery?.removeEventListener('change', handleSystemChange);
+		return () => {
+			systemQuery?.removeEventListener('change', handleSystemChange);
+			window.removeEventListener('bkalendar:theme-updated', handleExtensionTheme);
+		};
 	});
 
 	function updatePreference(): void {
@@ -31,6 +43,7 @@
 			preference,
 			systemQuery?.matches ?? window.matchMedia('(prefers-color-scheme: dark)').matches
 		);
+		publishThemeToExtension(window, preference);
 	}
 </script>
 

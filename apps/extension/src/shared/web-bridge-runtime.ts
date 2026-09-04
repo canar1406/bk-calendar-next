@@ -1,6 +1,7 @@
 import type { CourseColorPreferences } from '../../../../packages/google-calendar/src/course-appearance.ts';
 import type { SyncProfile } from '../../../../packages/timetable/src/storage.ts';
 import type { ExtensionState } from '../../../../packages/timetable/src/index.ts';
+import type { ThemePreference } from './theme.ts';
 
 export type WebBridgeRuntimeRequest =
 	| { type: 'bkalendar:web-bridge:profiles:get' }
@@ -10,7 +11,8 @@ export type WebBridgeRuntimeRequest =
 			type: 'bkalendar:web-bridge:appearance:save';
 			profileId: string;
 			preferences: CourseColorPreferences;
-	  };
+	  }
+	| { type: 'bkalendar:web-bridge:theme:save'; preference: ThemePreference };
 
 export interface WebBridgeStatePush {
 	type: 'bkalendar:web-bridge:state:push';
@@ -48,7 +50,11 @@ export function isWebBridgeRuntimeRequest(value: unknown): value is WebBridgeRun
 		(message.type === 'bkalendar:web-bridge:appearance:save' &&
 			typeof message.profileId === 'string' &&
 			message.preferences !== null &&
-			typeof message.preferences === 'object')
+			typeof message.preferences === 'object') ||
+		(message.type === 'bkalendar:web-bridge:theme:save' &&
+			(message.preference === 'light' ||
+				message.preference === 'dark' ||
+				message.preference === 'system'))
 	);
 }
 

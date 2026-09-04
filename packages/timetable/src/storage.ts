@@ -15,6 +15,7 @@ export interface SyncProfile {
 	semester: number;
 	calendarName: string;
 	calendarId?: string;
+	calendarOrigin?: 'managed' | 'legacy';
 	acceptedSnapshot?: TimetableSnapshot;
 	pendingSnapshot?: TimetableSnapshot;
 	lastCheckedAt?: string;

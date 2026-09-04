@@ -5,6 +5,7 @@
 	import {
 		GoogleCalendarRestGateway,
 		createManagedCalendar,
+		findLegacyCalendars,
 		findManagedCalendars,
 		isGoogleCalendarAuthError,
 		requestGoogleAccessToken,
@@ -120,6 +121,14 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			if (key.startsWith('bkalendar-next:course-colors:')) {
 				window.localStorage.setItem(key, JSON.stringify(preferences));
 			}
+		}
+		if (state.theme) {
+			window.localStorage.setItem('bkalendar-next:theme', state.theme);
+			window.dispatchEvent(
+				new CustomEvent('bkalendar:theme-updated', {
+					detail: { preference: state.theme }
+				})
+			);
 		}
 		const store = createProfileStore(createBrowserStorage(window.localStorage));
 		const orderedProfiles = [...state.profiles].sort(
@@ -337,6 +346,8 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 						gateway: new GoogleCalendarRestGateway(accessToken),
 						findCalendars: async (summary) =>
 							await findManagedCalendars(fetch, accessToken, summary),
+						findLegacyCalendars: async (sourceKind, semester) =>
+							await findLegacyCalendars(fetch, accessToken, sourceKind, semester),
 						createCalendar: async (summary) =>
 							await createManagedCalendar(fetch, accessToken, summary),
 						prepareEvents: (events) =>

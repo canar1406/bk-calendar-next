@@ -42,6 +42,7 @@ interface TransferContext {
 	readExtensionState?(): Promise<ExtensionState>;
 	writeProfile?(profile: SyncProfile): Promise<void>;
 	writeCourseAppearance?(profileId: string, preferences: CourseColorPreferences): Promise<void>;
+	writeTheme?(preference: 'light' | 'dark' | 'system'): Promise<void>;
 	postResponse(response: ExtensionTransferResponse | ExtensionStateReply): void;
 }
 
@@ -61,6 +62,17 @@ export async function handleExtensionTransferMessage(
 	if (isCourseAppearanceTransferMessage(event.data)) {
 		if (!context.writeCourseAppearance) return false;
 		await context.writeCourseAppearance(event.data.profileId, event.data.preferences);
+		return true;
+	}
+	if (
+		isRecord(event.data) &&
+		event.data.type === 'bkalendar:web-bridge:theme:save' &&
+		(event.data.preference === 'light' ||
+			event.data.preference === 'dark' ||
+			event.data.preference === 'system')
+	) {
+		if (!context.writeTheme) return false;
+		await context.writeTheme(event.data.preference);
 		return true;
 	}
 	if (isExtensionStateRequest(event.data)) {
@@ -115,6 +127,18 @@ export function createLocalExtensionState(
 		updatedAt,
 		profiles: sanitizeProfiles(profilesValue),
 		appearances: sanitizeAppearances(storageValue),
+		...(storageValue &&
+		typeof storageValue === 'object' &&
+		!Array.isArray(storageValue) &&
+		(storageValue as Record<string, unknown>)['bkalendar-next:theme'] &&
+		['light', 'dark', 'system'].includes(
+			String((storageValue as Record<string, unknown>)['bkalendar-next:theme'])
+		)
+			? {
+					theme: (storageValue as Record<string, unknown>)['bkalendar-next:theme'] as
+						'light' | 'dark' | 'system'
+				}
+			: {}),
 		status: sanitizeStatus(statusValue)
 	};
 }
@@ -167,6 +191,12 @@ if (typeof window !== 'undefined' && typeof chrome !== 'undefined') {
 						type: 'bkalendar:web-bridge:appearance:save',
 						profileId,
 						preferences
+					});
+				},
+				async writeTheme(preference) {
+					await sendBackgroundRequest({
+						type: 'bkalendar:web-bridge:theme:save',
+						preference
 					});
 				},
 				postResponse(response) {
@@ -247,6 +277,9 @@ function sanitizeProfiles(value: unknown): SyncProfile[] {
 				semester: item.semester,
 				calendarName: item.calendarName,
 				...(typeof item.calendarId === 'string' ? { calendarId: item.calendarId } : {}),
+				...(item.calendarOrigin === 'legacy' || item.calendarOrigin === 'managed'
+					? { calendarOrigin: item.calendarOrigin }
+					: {}),
 				...(item.acceptedSnapshot ? { acceptedSnapshot: item.acceptedSnapshot } : {}),
 				...(item.pendingSnapshot ? { pendingSnapshot: item.pendingSnapshot } : {}),
 				...(typeof item.lastCheckedAt === 'string' ? { lastCheckedAt: item.lastCheckedAt } : {}),

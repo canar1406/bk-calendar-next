@@ -1,4 +1,8 @@
-export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.app.created';
+export const CALENDAR_SCOPE = [
+	'https://www.googleapis.com/auth/calendar.events',
+	'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+	'https://www.googleapis.com/auth/calendar.app.created'
+].join(' ');
 
 export interface GoogleTokenResponse {
 	access_token?: string;

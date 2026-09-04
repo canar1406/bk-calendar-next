@@ -43,6 +43,34 @@ describe('trusted web bridge runtime', () => {
 		assert.deepEqual(writes, [{ profileId: 'student-2024:261', preferences }]);
 	});
 
+	it('stores a web theme choice through the trusted background bridge', async () => {
+		let preference = '';
+		const result = await handleWebBridgeRuntimeRequest(
+			{ type: 'bkalendar:web-bridge:theme:save', preference: 'dark' },
+			trustedUrl,
+			{
+				async readProfiles() {
+					return [];
+				},
+				async readState() {
+					throw new Error('not used');
+				},
+				async saveProfile() {
+					throw new Error('not used');
+				},
+				async saveAppearance() {
+					throw new Error('not used');
+				},
+				async saveTheme(value) {
+					preference = value;
+				}
+			}
+		);
+
+		assert.deepEqual(result, { handled: true });
+		assert.equal(preference, 'dark');
+	});
+
 	it('rejects messages from pages outside the official GitHub Pages path', async () => {
 		let writes = 0;
 		const context = {

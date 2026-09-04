@@ -20,6 +20,7 @@ import {
 import {
 	GoogleCalendarRestGateway,
 	createManagedCalendar,
+	findLegacyCalendars,
 	findManagedCalendars,
 	isGoogleCalendarAuthError,
 	syncManagedPresentation
@@ -74,6 +75,7 @@ import {
 const TRACKING_ALARM = 'bkalendar-next:track-mybk';
 const TRACKING_MODE_KEY = 'bkalendar-next:tracking-mode';
 const POLLING_INTERVAL_KEY = 'bkalendar-next:polling-interval-minutes';
+const THEME_STORAGE_KEY = 'bkalendar-next:theme';
 const COURSE_APPEARANCE_STORAGE_PREFIX = 'bkalendar-next:course-colors:';
 const DEFAULT_TRACKING_MODE: TrackingMode = 'review';
 let activeTrackingRun: Promise<void> | undefined;
@@ -187,6 +189,9 @@ async function handleWebBridgeRuntimeMessage(
 			} finally {
 				setTimeout(() => appearanceWritesInFlight.delete(profileId), 1_000);
 			}
+		},
+		async saveTheme(preference) {
+			await chrome.storage.local.set({ [THEME_STORAGE_KEY]: preference });
 		}
 	});
 	if (!result.handled) throw new Error('Web BKalendar không được phép truy cập bridge.');
@@ -207,6 +212,7 @@ function hasWebStateChange(changes: Record<string, chrome.storage.StorageChange>
 	return (
 		changes[PROFILE_STORAGE_KEY] !== undefined ||
 		changes[EXTENSION_STATUS_KEY] !== undefined ||
+		changes[THEME_STORAGE_KEY] !== undefined ||
 		Object.keys(changes).some((key) => key.startsWith('bkalendar-next:course-colors:'))
 	);
 }
@@ -537,6 +543,8 @@ async function processCapture(
 			const attempt = await syncPendingProfile(store, staged.profileId, {
 				gateway: new GoogleCalendarRestGateway(accessToken),
 				findCalendars: async (summary) => await findManagedCalendars(fetch, accessToken, summary),
+				findLegacyCalendars: async (sourceKind, semester) =>
+					await findLegacyCalendars(fetch, accessToken, sourceKind, semester),
 				createCalendar: async (summary) => await createManagedCalendar(fetch, accessToken, summary),
 				prepareEvents: (events) =>
 					prepareEventsWithCourseAppearance(events, storedAppearance[appearanceKey])

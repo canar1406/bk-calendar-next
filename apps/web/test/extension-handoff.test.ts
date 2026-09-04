@@ -10,6 +10,7 @@ import {
 import {
 	publishCourseAppearanceToExtension,
 	publishProfileToExtension,
+	publishThemeToExtension,
 	requestExtensionStateFromExtension,
 	requestPendingSnapshotFromExtension,
 	subscribeToExtensionState,
@@ -163,6 +164,17 @@ describe('extension-to-web browser handoff', () => {
 				targetOrigin: 'https://canar1406.github.io'
 			}
 		]);
+	});
+
+	it('publishes the selected theme to the installed extension', () => {
+		const targetWindow = new FakeWindow('?from=extension');
+
+		publishThemeToExtension(targetWindow, 'dark');
+
+		assert.deepEqual(targetWindow.posted[0], {
+			message: { type: 'bkalendar:web-bridge:theme:save', preference: 'dark' },
+			targetOrigin: 'https://canar1406.github.io'
+		});
 	});
 
 	it('publishes a profile snapshot to the installed extension without token fields', () => {

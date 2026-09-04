@@ -9,6 +9,7 @@ import {
 	type CaptureCompleteness,
 	type ManagedEvent
 } from '../../../packages/timetable/src/index.ts';
+import { GoogleCalendarApiError } from '../../../packages/google-calendar/src/index.ts';
 import {
 	createProfileStore,
 	type KeyValueStorage,
@@ -83,6 +84,182 @@ describe('Google profile sync workflow', () => {
 		assert.equal(tokenRequests, 2);
 		assert.equal(syncAttempts, 2);
 		assert.equal(retryPreparation, 1);
+	});
+
+	it('migrates a legacy repo calendar so new events are added and stale ones are removed', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = await snapshot(
+			[
+				event,
+				{ ...event, stableKey: 'new-event', courseCode: 'AS1001', title: 'Nhập môn kỹ thuật' }
+			],
+			{ state: 'complete', parsedRows: 2, expectedRows: 2 }
+		);
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			pendingSnapshot: pending
+		});
+		const calls: string[] = [];
+		const synced = await syncPendingProfile(store, 'student-2024:261', {
+			gateway: {
+				...emptyGateway(),
+				async listCalendarEvents() {
+					return [
+						{
+							id: 'legacy-old',
+							stableKey: 'legacy:legacy-old',
+							fingerprint: 'legacy:legacy-old',
+							summary: 'Môn cũ',
+							description: 'courseCode: OLD1001',
+							location: 'H1',
+							start: event.start,
+							end: event.end
+						},
+						{
+							id: 'legacy-current',
+							stableKey: 'legacy:legacy-current',
+							fingerprint: 'legacy:legacy-current',
+							summary: event.title,
+							description: 'courseCode: MT1003',
+							location: event.location,
+							start: event.start,
+							end: event.end
+						},
+						{
+							id: 'personal-note',
+							stableKey: 'legacy:personal-note',
+							fingerprint: 'legacy:personal-note',
+							summary: 'Việc cá nhân',
+							description: 'Ghi chú riêng',
+							location: '',
+							start: event.start,
+							end: event.end
+						}
+					];
+				},
+				async listManagedEvents() {
+					throw new Error('legacy adapter must list unmarked events');
+				},
+				async insertEvent(_calendarId, localEvent) {
+					calls.push(`insert:${localEvent.courseCode}`);
+					return remote(localEvent);
+				},
+				async patchEvent(_calendarId, _eventId, localEvent) {
+					calls.push(`patch:${localEvent.courseCode}`);
+					return remote(localEvent);
+				},
+				async deleteEvent(_calendarId, eventId) {
+					calls.push(`delete:${eventId}`);
+				}
+			},
+			async findCalendars() {
+				return [];
+			},
+			async findLegacyCalendars() {
+				return [{ id: 'legacy-calendar' }];
+			},
+			async createCalendar() {
+				throw new Error('should reuse the legacy calendar');
+			}
+		});
+
+		assert.deepEqual(calls, ['insert:AS1001', 'patch:MT1003', 'delete:legacy-old']);
+		assert.equal(synced.profile.calendarId, 'legacy-calendar');
+		assert.equal(synced.profile.calendarOrigin, 'legacy');
+		assert.equal(synced.promoted, true);
+	});
+
+	it('re-resolves a stale calendar ID after Google returns 404 before inserting new events', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = await snapshot(
+			[{ ...event, courseCode: 'AS1001', title: 'Nhập môn kỹ thuật' }],
+			{ state: 'complete', parsedRows: 1, expectedRows: 1 }
+		);
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			calendarId: 'old-account-calendar',
+			pendingSnapshot: pending
+		});
+		let listCalls = 0;
+		let insertedInto = '';
+		const synced = await syncPendingProfile(store, 'student-2024:261', {
+			gateway: {
+				...emptyGateway(),
+				async listManagedEvents(calendarId) {
+					listCalls += 1;
+					if (calendarId === 'old-account-calendar') {
+						throw new GoogleCalendarApiError(404, 'Not Found');
+					}
+					return [];
+				},
+				async insertEvent(calendarId, localEvent) {
+					insertedInto = `${calendarId}:${localEvent.courseCode}`;
+					return remote(localEvent);
+				}
+			},
+			async findCalendars() {
+				return [{ id: 'new-account-calendar' }];
+			},
+			async createCalendar() {
+				throw new Error('must reuse the current account calendar');
+			}
+		});
+
+		assert.equal(listCalls, 2);
+		assert.equal(insertedInto, 'new-account-calendar:AS1001');
+		assert.equal(synced.profile.calendarId, 'new-account-calendar');
+		assert.equal(synced.promoted, true);
+	});
+
+	it('recognizes an existing original-repo calendar ID before syncing its unmarked events', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = await snapshot(
+			[{ ...event, courseCode: 'AS1001', title: 'Nhập môn kỹ thuật' }],
+			{ state: 'complete', parsedRows: 1, expectedRows: 1 }
+		);
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			calendarId: 'legacy-student-calendar',
+			pendingSnapshot: pending
+		});
+		let legacyListCalls = 0;
+		let inserted = 0;
+		const synced = await syncPendingProfile(store, 'student-2024:261', {
+			gateway: {
+				...emptyGateway(),
+				async listCalendarEvents() {
+					legacyListCalls += 1;
+					return [];
+				},
+				async insertEvent() {
+					inserted += 1;
+					return remote(event);
+				}
+			},
+			async findLegacyCalendars() {
+				return [{ id: 'legacy-student-calendar' }];
+			},
+			async createCalendar() {
+				throw new Error('must reuse the recognized legacy calendar');
+			}
+		});
+
+		assert.equal(legacyListCalls, 1);
+		assert.equal(inserted, 1);
+		assert.equal(synced.profile.calendarOrigin, 'legacy');
+		assert.equal(synced.promoted, true);
 	});
 
 	it('persists a newly created calendar ID before inserting events and then promotes the snapshot', async () => {

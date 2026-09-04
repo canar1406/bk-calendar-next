@@ -71,6 +71,16 @@ export interface PublishProfileOptions {
 	profile: SyncProfile;
 }
 
+export function publishThemeToExtension(
+	targetWindow: Pick<ExtensionMessageWindow, 'location' | 'postMessage'>,
+	preference: 'light' | 'dark' | 'system'
+): void {
+	targetWindow.postMessage(
+		{ type: 'bkalendar:web-bridge:theme:save', preference },
+		targetWindow.location.origin
+	);
+}
+
 export function publishProfileToExtension({ targetWindow, profile }: PublishProfileOptions): void {
 	targetWindow.postMessage(
 		createExtensionProfileSyncMessage(profile),

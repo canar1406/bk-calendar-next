@@ -5,6 +5,11 @@ export interface ManagedGoogleEvent {
 	etag?: string;
 	stableKey: string;
 	fingerprint: string;
+	summary?: string;
+	description?: string;
+	location?: string;
+	start?: string;
+	end?: string;
 	sourceFingerprint?: string;
 	colorId?: string;
 	icon?: string;
@@ -12,6 +17,7 @@ export interface ManagedGoogleEvent {
 
 export interface GoogleCalendarGateway {
 	listManagedEvents(calendarId: string): Promise<ManagedGoogleEvent[]>;
+	listCalendarEvents?(calendarId: string): Promise<ManagedGoogleEvent[]>;
 	insertEvent(calendarId: string, event: ManagedEvent): Promise<ManagedGoogleEvent>;
 	patchEvent(
 		calendarId: string,
@@ -279,6 +285,7 @@ export {
 	GoogleCalendarRestGateway,
 	MANAGED_BY,
 	createManagedCalendar,
+	findLegacyCalendars,
 	findManagedCalendars,
 	isGoogleCalendarAuthError,
 	toGoogleEventResource,

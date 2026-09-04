@@ -4,6 +4,7 @@ import {
 	GoogleCalendarRestGateway,
 	MANAGED_BY,
 	createManagedCalendar,
+	findLegacyCalendars,
 	findManagedCalendars,
 	isGoogleCalendarAuthError,
 	toGoogleEventResource
@@ -37,6 +38,21 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('Google Calendar REST payload', () => {
+	it('finds calendars created by the original BKalendar names', async () => {
+		const fetcher: typeof fetch = async () =>
+			response({
+				items: [
+					{ id: 'primary', primary: true, summary: 'SV261' },
+					{ id: 'legacy-student', summary: 'SV261' },
+					{ id: 'unrelated', summary: 'SV262' }
+				]
+			});
+
+		assert.deepEqual(await findLegacyCalendars(fetcher, 'token', 'student-2024', 261), [
+			{ id: 'legacy-student' }
+		]);
+	});
+
 	it('identifies expired or unauthorized Google tokens without classifying ordinary API errors', () => {
 		assert.equal(
 			isGoogleCalendarAuthError(new Error('Google Calendar API 401: Invalid Credentials')),
@@ -145,6 +161,40 @@ describe('Google Calendar REST payload', () => {
 });
 
 describe('Google Calendar REST gateway', () => {
+	it('lists legacy events without requiring the new managed metadata marker', async () => {
+		const fetcher: typeof fetch = async (input) => {
+			assert.match(String(input), /events/);
+			assert.doesNotMatch(String(input), /privateExtendedProperty/);
+			return response({
+				items: [
+					{
+						id: 'legacy-event',
+						etag: 'legacy-etag',
+						summary: 'Giải tích 1',
+						description: 'courseCode: MT1003',
+						location: 'H1-304',
+						start: { dateTime: '2026-08-24T00:00:00.000Z', timeZone: 'Asia/Ho_Chi_Minh' },
+						end: { dateTime: '2026-08-24T02:50:00.000Z', timeZone: 'Asia/Ho_Chi_Minh' }
+					}
+				]
+			});
+		};
+		const gateway = new GoogleCalendarRestGateway('token', fetcher);
+		assert.deepEqual(await gateway.listCalendarEvents('legacy-calendar'), [
+			{
+				id: 'legacy-event',
+				etag: 'legacy-etag',
+				stableKey: 'legacy:legacy-event',
+				fingerprint: 'legacy:legacy-event',
+				summary: 'Giải tích 1',
+				description: 'courseCode: MT1003',
+				location: 'H1-304',
+				start: '2026-08-24T00:00:00.000Z',
+				end: '2026-08-24T02:50:00.000Z'
+			}
+		]);
+	});
+
 	it('paginates and returns only well-formed managed events', async () => {
 		const urls: string[] = [];
 		const fetcher: typeof fetch = async (input) => {

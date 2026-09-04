@@ -151,6 +151,14 @@ describe('extension-to-web review bridge', () => {
 		assert.equal(JSON.stringify(responses).includes('must-not-reach-state'), false);
 	});
 
+	it('hydrates the synchronized theme from trusted local extension storage', () => {
+		const state = createLocalExtensionState([], { state: 'idle' }, '2026-09-04T01:00:00.000Z', {
+			'bkalendar-next:theme': 'dark'
+		});
+
+		assert.equal(state.theme, 'dark');
+	});
+
 	it('includes only course appearance records from extension storage', () => {
 		const preferences = {
 			schemaVersion: 1,

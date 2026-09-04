@@ -11,6 +11,7 @@ export interface WebBridgeRuntimeContext {
 	readState(): Promise<ExtensionState>;
 	saveProfile(profile: SyncProfile): Promise<void>;
 	saveAppearance(profileId: string, preferences: unknown): Promise<void>;
+	saveTheme?(preference: 'light' | 'dark' | 'system'): Promise<void>;
 }
 
 export async function handleWebBridgeRuntimeRequest(
@@ -31,6 +32,11 @@ export async function handleWebBridgeRuntimeRequest(
 	}
 	if (command.type === 'bkalendar:web-bridge:profile:save') {
 		await context.saveProfile(command.profile);
+		return { handled: true };
+	}
+	if (command.type === 'bkalendar:web-bridge:theme:save') {
+		if (!context.saveTheme) return { handled: false };
+		await context.saveTheme(command.preference);
 		return { handled: true };
 	}
 	if (!isCourseColorPreferences(command.preferences)) {

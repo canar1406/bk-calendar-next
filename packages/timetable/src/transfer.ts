@@ -41,6 +41,7 @@ export interface ExtensionState {
 	updatedAt: string;
 	profiles: SyncProfile[];
 	appearances: Record<string, unknown>;
+	theme?: 'light' | 'dark' | 'system';
 	status: ExtensionStateStatus;
 }
 

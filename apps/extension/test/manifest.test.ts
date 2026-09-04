@@ -67,6 +67,8 @@ describe('MV3 manifest', () => {
 		assert.ok((manifest.key?.length ?? 0) > 300);
 		assert.match(manifest.oauth2?.client_id ?? '', /\.apps\.googleusercontent\.com$/);
 		assert.deepEqual(manifest.oauth2?.scopes, [
+			'https://www.googleapis.com/auth/calendar.events',
+			'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
 			'https://www.googleapis.com/auth/calendar.app.created'
 		]);
 	});
