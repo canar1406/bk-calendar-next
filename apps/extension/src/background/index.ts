@@ -569,6 +569,7 @@ async function captureStudent2024Offscreen(
 	credentials: MyBkCredentials
 ): Promise<Parameters<typeof stageMyBkCapture>[1]> {
 	await ensureOffscreenDocument();
+	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
 		offscreenCredentials = credentials;
 		const capture = await new Promise<Parameters<typeof stageMyBkCapture>[1]>((resolve, reject) => {
@@ -579,15 +580,20 @@ async function captureStudent2024Offscreen(
 					if (!response?.ok) reject(new Error(response?.message ?? 'Không tạo được vùng đọc MyBK ẩn.'));
 				})
 				.catch(reject);
-			setTimeout(() => {
+			timeout = setTimeout(() => {
 				if (offscreenCaptureWaiter?.reject === reject) {
 					offscreenCaptureWaiter = undefined;
-					reject(new Error('MyBK không trả về bảng TKB trong vùng đọc ẩn.'));
+					reject(
+						new Error(
+							'Vùng đọc nền không nhận được bảng TKB sau 15 giây. Hãy mở lại MyBK một lần rồi thử lại.'
+						)
+					);
 				}
-			}, 30_000);
+			}, 15_000);
 		});
 		return capture;
 	} finally {
+		if (timeout) clearTimeout(timeout);
 		offscreenCaptureWaiter = undefined;
 		offscreenCredentials = undefined;
 		await chrome.offscreen.closeDocument().catch(() => {});
