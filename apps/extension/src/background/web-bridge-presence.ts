@@ -17,7 +17,10 @@ export async function detectWebBridgeConnection(api: WebBridgePresenceApi): Prom
 	for (const tab of tabs) {
 		if (typeof tab.id !== 'number') continue;
 		try {
-			const response = await api.sendMessage(tab.id, { type: WEB_BRIDGE_PING_TYPE });
+			const response = await withTimeout(
+				api.sendMessage(tab.id, { type: WEB_BRIDGE_PING_TYPE }),
+				800
+			);
 			if (response?.ok === true) return true;
 		} catch {
 			// A tab opened before the extension was reloaded has no active content bridge.
@@ -33,11 +36,27 @@ export async function ensureWebBridgeConnection(api: WebBridgePresenceApi): Prom
 		tabs.map(async (tab) => {
 			if (typeof tab.id !== 'number') return;
 			try {
-				await api.sendMessage(tab.id, { type: WEB_BRIDGE_PING_TYPE });
+				await withTimeout(api.sendMessage(tab.id, { type: WEB_BRIDGE_PING_TYPE }), 800);
 			} catch {
-				await api.inject(tab.id).catch(() => {});
+				await withTimeout(api.inject(tab.id), 800).catch(() => {});
 			}
 		})
 	);
 	return await detectWebBridgeConnection(api);
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error('Web bridge timeout.')), timeoutMs);
+		promise.then(
+			(value) => {
+				clearTimeout(timer);
+				resolve(value);
+			},
+			(error) => {
+				clearTimeout(timer);
+				reject(error);
+			}
+		);
+	});
 }

@@ -97,7 +97,8 @@ describe('MV3 manifest', () => {
 			},
 			{
 				matches: [myBkLegacyUrl, hcmutSsoUrl, lecturerUrl, postgraduateUrl],
-				js: ['content.js']
+				js: ['content.js'],
+				all_frames: true
 			},
 			{
 				matches: [reviewUrl],
