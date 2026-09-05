@@ -6,12 +6,36 @@ nhân đôi hoặc xóa nhầm sự kiện cá nhân.
 
 Website: <https://canar1406.github.io/bk-calendar-next/>
 
-Extension mới nhất:
+Các bản extension đã phát hành:
 <https://github.com/canar1406/bk-calendar-next/releases/latest>
+
+## Trạng thái bản mã nguồn hiện tại
+
+Extension trong mã nguồn có phiên bản **0.5.6**. Bản này chuyển tracking về
+**tab inactive** và bỏ thử nghiệm offscreen. Tab tạm vẫn có thể xuất hiện trên
+thanh tab; đây **không phải chế độ ẩn hoàn toàn**.
+
+Các thay đổi đang có:
+
+- Dùng tab `active: false` để đọc trang lịch và xử lý đăng nhập.
+- Đóng tab tạm sau khi nhận được lịch hoặc lượt capture kết thúc bằng lỗi.
+- Bỏ permission, tài liệu HTML và bước build offscreen.
+- Sửa popup: khi Google sync hoàn tất với 0 thao tác ghi, hiển thị
+  **“Lịch đã khớp Google Calendar”** và **“Đã đồng bộ”**.
+- Phân biệt **“Đã xóa”** sau khi áp dụng với **“Có thể xóa”** khi còn chờ duyệt.
+- Giữ nguyên ba scope Google Calendar được liệt kê bên dưới.
+
+Source trên nhánh `main`, ZIP build cục bộ và GitHub Release là ba trạng thái
+khác nhau. Push source không tự thay bản extension đang cài trên máy. Hãy kiểm
+tra phiên bản của Release/artifact trước khi tải; mục Releases có thể chưa có
+ZIP trùng với phiên bản source mới nhất.
+
+Đợt rà soát toàn bộ source chưa hoàn tất. Test tự động và build không thay thế
+kiểm thử MyBK/CAS, Chrome/Edge và Google Calendar bằng tài khoản thật.
 
 ## Tính năng chính
 
-- Đọc thời khóa biểu MyBK của một học kỳ.
+- Đọc bốn loại lịch: sinh viên MyBK mới, sinh viên cũ, giảng viên và sau đại học.
 - Hiển thị lịch theo từng tuần để người dùng kiểm tra trước.
 - Đồng bộ vào một lịch riêng do BKalendar tạo trong Google Calendar.
 - Không sửa hoặc xóa lịch cá nhân mặc định của người dùng.
@@ -38,7 +62,9 @@ Extension mới nhất:
   chưa được người dùng duyệt.
 - Chế độ **Tự động cập nhật và báo sau** chỉ hoạt động sau khi người dùng chủ
   động bật.
-- Chỉ lịch riêng do BKalendar tạo mới được phép thêm, sửa hoặc xóa sự kiện.
+- Đồng bộ lịch riêng của BKalendar; nhánh migration còn nhận diện lịch cũ
+  `SV<học kỳ>`, `GV<học kỳ>` và `SDH<học kỳ>`. Cần kiểm thử migration có kiểm soát
+  trước khi áp dụng lên dữ liệu quan trọng.
 - Bản đọc MyBK không đầy đủ hoặc không xác định không bao giờ được phép kích
   hoạt thao tác xóa.
 - Nhập lại cùng một thời khóa biểu không tạo thêm bản sao sự kiện.
@@ -55,6 +81,17 @@ Extension mới nhất:
 Extension chỉ xin các quyền cần thiết cho bộ nhớ cục bộ, thông báo, Google
 Calendar và các trang MyBK/CAS phục vụ việc theo dõi trong nền.
 
+### Cập nhật bản đã giải nén
+
+1. Giải nén ZIP mới vào thư mục extension đang sử dụng, thay các file build cũ.
+2. Trên trang quản lý extension, bấm **Tải lại** ở mục BKalendar Next.
+3. Kiểm tra số phiên bản hiển thị trên trang chi tiết.
+4. Tải lại các tab MyBK/BKalendar Web đang mở nếu chúng vẫn giữ content script cũ.
+
+Không cần gỡ extension chỉ để cập nhật: gỡ tiện ích có thể làm mất dữ liệu và
+cấu hình cục bộ. Trình duyệt không tự cập nhật một extension đã giải nén chỉ vì
+bạn đã tải ZIP mới.
+
 ### Chế độ hoạt động của extension
 
 - **Tắt theo dõi:** không tự kiểm tra MyBK.
@@ -63,9 +100,29 @@ Calendar và các trang MyBK/CAS phục vụ việc theo dõi trong nền.
 - **Tự động cập nhật và báo sau:** tự áp dụng thay đổi an toàn, sau đó gửi thông
   báo. Bấm vào thông báo để xem diff chi tiết.
 
-Các nút kiểm tra lại trong extension thực hiện yêu cầu ở background và không mở
-tab MyBK. Nếu chưa có thông tin đăng nhập, extension sẽ yêu cầu người dùng cấu
-hình thay vì tự điều hướng sang MyBK.
+Khi kiểm tra định kỳ hoặc bấm kiểm tra lại, extension tạo một tab tạm với
+`active: false`, điều hướng tới nguồn lịch, đọc DOM rồi đóng tab. Không tạo cửa
+sổ popup riêng hoặc cửa sổ thu nhỏ. Tab tạm không được chủ động chọn làm tab
+hiện hành, nhưng vẫn có thể nhìn thấy trên thanh tab.
+
+Các chu kỳ hiện có: **5, 10, 15, 30 hoặc 60 phút**. Extension cũng kiểm tra khi
+trình duyệt khởi động và quan sát thay đổi DOM khi trang lịch đang mở.
+Đây là kiểm tra định kỳ kết hợp quan sát trang, không phải dịch vụ push
+thời gian thực 24/7 từ MyBK. Không đảm bảo kiểm tra khi trình duyệt đóng,
+máy ngủ, mạng mất kết nối hoặc phiên đăng nhập không sử dụng được.
+
+Nếu chưa lưu thông tin đăng nhập, người dùng cần cấu hình và xác nhận đồng ý.
+Các nguồn lịch cũ còn phụ thuộc việc portal HCMUT tiếp tục phục vụ format đó.
+
+### Đọc trạng thái popup
+
+- **Lịch đã khớp Google Calendar:** lượt sync hoàn tất, không cần ghi thay đổi.
+- **Đã tự động cập nhật:** lượt sync có thao tác thêm, sửa hoặc xóa.
+- **Chưa đồng bộ:** bản đọc chưa được áp dụng; không có nghĩa lịch trên Google
+  đang trống.
+- Các số **Thêm mới / Thay đổi / Có thể xóa (hoặc Đã xóa)** mô tả thay đổi
+  của lượt kiểm tra, không phải tổng số sự kiện trong học kỳ.
+- Timeout/lỗi capture không được xem là bằng chứng lịch đã bị xóa hết.
 
 ## Đồng bộ màu và icon giữa web với extension
 
@@ -113,10 +170,14 @@ Cài dependency và chạy toàn bộ kiểm tra:
 
 ```bash
 pnpm install
+pnpm lint
+pnpm build
 pnpm test
 pnpm check
-pnpm build
 ```
+
+Một số test đọc output extension trong `dist`, vì vậy cần build trước khi
+chạy toàn bộ test trên một checkout mới.
 
 Chạy website ở môi trường local:
 
@@ -159,12 +220,26 @@ Cần tạo OAuth client trong Google Cloud và bật Google Calendar API. Tài 
 Gmail thông thường và tài khoản Google Workspace HCMUT sử dụng chung màn hình
 chọn tài khoản; không giới hạn bằng hosted domain.
 
+Code web và manifest extension giữ nguyên:
+
+```text
+https://www.googleapis.com/auth/calendar.events
+https://www.googleapis.com/auth/calendar.calendarlist.readonly
+https://www.googleapis.com/auth/calendar.app.created
+```
+
+`calendar.events` phục vụ thao tác event, bao gồm migration lịch cũ;
+`calendar.calendarlist.readonly` dùng tìm lịch; `calendar.app.created` dùng
+tạo và quản lý lịch riêng của app. Không tự hạ scope để che cảnh báo OAuth.
+Trạng thái xét duyệt phải được kiểm tra trực tiếp trong Google Cloud Console;
+source hoặc ZIP build thành công không chứng minh app đã được Google xác minh.
+
 Khi dùng bản extension unpacked hiện tại trên Edge/Chrome, OAuth client loại
 **Web application** dùng cho luồng đăng nhập extension phải có Authorized
 redirect URI:
 
 ```text
-https://bmpehgpialackfeihijielalbcbcbk.chromiumapp.org/
+https://bmpehgipalackfeiihijiliealbcbcbk.chromiumapp.org/
 ```
 
 Đây là redirect URI tương ứng với extension ID của bản phát hành hiện tại.

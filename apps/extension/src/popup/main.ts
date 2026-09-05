@@ -197,6 +197,8 @@ async function renderStoredState(): Promise<void> {
 	addedCount.textContent = String(viewModel.counts.added);
 	changedCount.textContent = String(viewModel.counts.changed);
 	removedCount.textContent = String(viewModel.counts.removed);
+	document.querySelector<HTMLElement>('.local-badge')!.textContent = viewModel.summaryLabel;
+	removedCard.querySelector('span')!.textContent = viewModel.removedLabel;
 	removedCard.dataset.blocked = String(viewModel.deletionBlocked);
 	warning.hidden = viewModel.warning === undefined;
 	warningText.textContent = viewModel.warning ?? '';
@@ -322,7 +324,7 @@ async function handlePrimaryAction(): Promise<void> {
 	primaryAction.disabled = true;
 	statusTitle.textContent = 'Đang kiểm tra MyBK trong nền…';
 	statusDetail.textContent =
-		'Tiện ích đang dùng cửa sổ nền đã thu nhỏ để đăng nhập và đọc thời khóa biểu.';
+		'Tiện ích đang dùng một tab nền không lấy focus để đăng nhập và đọc thời khóa biểu; tab sẽ tự đóng sau lượt kiểm tra.';
 	try {
 		await sendRuntimeMessage({ type: 'bkalendar:tracking:run-now' });
 	} catch (error) {

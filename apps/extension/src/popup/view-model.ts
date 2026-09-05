@@ -22,6 +22,8 @@ export interface PopupViewModel {
 	tone: 'idle' | 'complete' | 'warning' | 'error';
 	title: string;
 	detail: string;
+	summaryLabel: string;
+	removedLabel: string;
 	profileLabel?: string;
 	capturedLabel?: string;
 	counts: {
@@ -62,6 +64,8 @@ export function buildPopupViewModel(
 		const sourceName = sourceDisplayName(sourceKind);
 		return {
 			tone: profile ? 'complete' : 'idle',
+			summaryLabel: profile ? 'Đã đồng bộ cục bộ' : 'Chưa đồng bộ',
+			removedLabel: 'Đã xóa',
 			title: profile ? `Đã nhận lịch ${sourceName}` : `Chưa có lịch ${sourceName}`,
 			detail: profile
 				? 'Hồ sơ này đã được đồng bộ cục bộ từ BKalendar Web. Extension chỉ hiển thị đúng nguồn đã chọn và không giả vờ tự theo dõi trang chưa được hỗ trợ.'
@@ -85,6 +89,8 @@ export function buildPopupViewModel(
 	if (configured === false) {
 		return {
 			tone: 'idle',
+			summaryLabel: 'Chưa đồng bộ',
+			removedLabel: 'Có thể xóa',
 			title: 'Chưa cấu hình MyBK',
 			detail: 'Hãy lưu tài khoản MyBK trong thiết lập để bắt đầu theo dõi thời khóa biểu.',
 			counts: emptyCounts,
@@ -97,6 +103,8 @@ export function buildPopupViewModel(
 	if (trackingMode === 'auto-safe' && googleConnected === false) {
 		return {
 			tone: 'warning',
+			summaryLabel: 'Chưa đồng bộ',
+			removedLabel: 'Có thể xóa',
 			title: 'Cần kết nối Google Calendar',
 			detail:
 				'Chế độ tự động chưa thể chạy vì Google Calendar chưa được kết nối. Hãy cấp quyền một lần để bật tự động cập nhật.',
@@ -110,6 +118,8 @@ export function buildPopupViewModel(
 	if (status.state === 'idle') {
 		return {
 			tone: 'idle',
+			summaryLabel: 'Chưa đồng bộ',
+			removedLabel: 'Có thể xóa',
 			title: 'Chưa có dữ liệu để xem',
 			detail: 'Mở trang thời khóa biểu MyBK để tiện ích đọc và lưu bản xem trước cục bộ.',
 			counts: emptyCounts,
@@ -122,6 +132,8 @@ export function buildPopupViewModel(
 	if (status.state === 'error') {
 		return {
 			tone: 'error',
+			summaryLabel: 'Chưa đồng bộ',
+			removedLabel: 'Có thể xóa',
 			title: 'Chưa đọc được lịch',
 			detail: status.message,
 			capturedLabel: formatDateTime(status.checkedAt),
@@ -141,6 +153,7 @@ export function buildPopupViewModel(
 		: emptyCounts;
 	const total = counts.added + counts.changed + counts.removed;
 	const alreadyApplied = status.syncState === 'applied';
+	const zeroWriteSync = alreadyApplied && total === 0;
 	const deletionBlocked =
 		counts.removed > 0 &&
 		(status.changes?.canDelete === false || status.completeness.state !== 'complete');
@@ -152,18 +165,24 @@ export function buildPopupViewModel(
 
 	return {
 		tone: status.completeness.state === 'complete' ? 'complete' : 'warning',
-		title: alreadyApplied
-			? 'Đã tự động cập nhật'
-			: status.changes === undefined
-				? 'Đã lưu bản xem trước cục bộ'
-				: total === 0
-					? 'Không có thay đổi'
-					: `${total} thay đổi cần xem lại`,
-		detail: alreadyApplied
-			? `${total} thay đổi đã được ghi vào Google Calendar. Mở diff bên dưới để xem chi tiết.`
-			: status.changes === undefined
-				? `Đã đọc ${status.completeness.parsedRows} dòng từ MyBK.`
-				: `${status.changes.unchanged} mục không đổi. Chưa có dữ liệu nào được ghi vào Google Calendar.`,
+		summaryLabel: alreadyApplied ? 'Đã đồng bộ' : 'Chưa đồng bộ',
+		removedLabel: alreadyApplied ? 'Đã xóa' : 'Có thể xóa',
+		title: zeroWriteSync
+			? 'Lịch đã khớp Google Calendar'
+			: alreadyApplied
+				? 'Đã tự động cập nhật'
+				: status.changes === undefined
+					? 'Đã lưu bản xem trước cục bộ'
+					: total === 0
+						? 'Không có thay đổi'
+						: `${total} thay đổi cần xem lại`,
+		detail: zeroWriteSync
+			? 'Không có thay đổi mới. Không cần thêm, sửa hoặc xóa sự kiện trong lần kiểm tra này.'
+			: alreadyApplied
+				? `${total} thay đổi đã được ghi vào Google Calendar. Mở diff bên dưới để xem chi tiết.`
+				: status.changes === undefined
+					? `Đã đọc ${status.completeness.parsedRows} dòng từ MyBK.`
+					: `${status.changes.unchanged} mục không đổi. Chưa có dữ liệu nào được ghi vào Google Calendar.`,
 		...(profile
 			? {
 					profileLabel: `Học kỳ ${profile.semester} · ${profile.pendingEventCount} buổi học`
@@ -173,9 +192,17 @@ export function buildPopupViewModel(
 		counts,
 		deletionBlocked,
 		...(warning ? { warning } : {}),
-		actionLabel: alreadyApplied ? 'Xem diff chi tiết' : 'Xem lại trên BKalendar',
-		actionKind: alreadyApplied ? 'show-diff' : 'open-web-review',
-		...(alreadyApplied ? {} : { actionUrl: WEB_REVIEW_URL })
+		actionLabel: zeroWriteSync
+			? 'Mở BKalendar Web'
+			: alreadyApplied
+				? 'Xem diff chi tiết'
+				: 'Xem lại trên BKalendar',
+		actionKind: zeroWriteSync
+			? 'open-web-review'
+			: alreadyApplied
+				? 'show-diff'
+				: 'open-web-review',
+		...(zeroWriteSync || !alreadyApplied ? { actionUrl: WEB_REVIEW_URL } : {})
 	};
 }
 

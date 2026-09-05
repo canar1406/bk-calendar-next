@@ -51,8 +51,7 @@ describe('MV3 manifest', () => {
 			'alarms',
 			'notifications',
 			'identity',
-			'scripting',
-			'offscreen'
+			'scripting'
 		]);
 		assert.deepEqual(manifest.host_permissions, [
 			myBkAppUrl,

@@ -33,6 +33,43 @@ const currentProfile: StoredProfileSummary = {
 };
 
 describe('extension popup view model', () => {
+	it('describes a successful zero-write sync without claiming new updates or offering an empty diff', () => {
+		const view = buildPopupViewModel({
+			...capturedStatus,
+			syncState: 'applied',
+			changes: { added: 0, changed: 0, removed: 0, unchanged: 8, canDelete: true }
+		});
+		assert.equal(view.title, 'Lịch đã khớp Google Calendar');
+		assert.equal(
+			view.detail,
+			'Không có thay đổi mới. Không cần thêm, sửa hoặc xóa sự kiện trong lần kiểm tra này.'
+		);
+		assert.equal(view.summaryLabel, 'Đã đồng bộ');
+		assert.equal(view.removedLabel, 'Đã xóa');
+		assert.equal(view.actionKind, 'open-web-review');
+		assert.ok(view.actionUrl);
+		assert.deepEqual(view.counts, { added: 0, changed: 0, removed: 0 });
+	});
+
+	it('labels completed writes as synced and removed events as already deleted', () => {
+		const view = buildPopupViewModel({ ...capturedStatus, syncState: 'applied' });
+		assert.equal(view.summaryLabel, 'Đã đồng bộ');
+		assert.equal(view.removedLabel, 'Đã xóa');
+		assert.equal(view.title, 'Đã tự động cập nhật');
+		assert.equal(view.actionKind, 'show-diff');
+	});
+
+	it('does not describe an unapproved zero-change review as synchronized', () => {
+		const view = buildPopupViewModel({
+			...capturedStatus,
+			syncState: 'review',
+			changes: { added: 0, changed: 0, removed: 0, unchanged: 8, canDelete: true }
+		});
+		assert.equal(view.summaryLabel, 'Chưa đồng bộ');
+		assert.equal(view.removedLabel, 'Có thể xóa');
+		assert.equal(view.title, 'Không có thay đổi');
+	});
+
 	it('builds a detailed diff that can be opened from a notification', () => {
 		const baseEvent = {
 			stableKey: 'physics',
