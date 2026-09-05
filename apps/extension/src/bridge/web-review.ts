@@ -143,6 +143,17 @@ export function createLocalExtensionState(
 						'light' | 'dark' | 'system'
 				}
 			: {}),
+		...(storageValue &&
+		typeof storageValue === 'object' &&
+		!Array.isArray(storageValue) &&
+		((storageValue as Record<string, unknown>)['bkalendar-next:theme-resolved'] === 'light' ||
+			(storageValue as Record<string, unknown>)['bkalendar-next:theme-resolved'] === 'dark')
+			? {
+					resolvedTheme: (storageValue as Record<string, unknown>)[
+						'bkalendar-next:theme-resolved'
+					] as 'light' | 'dark'
+				}
+			: {}),
 		status: sanitizeStatus(statusValue)
 	};
 }
@@ -207,17 +218,21 @@ if (typeof window !== 'undefined' && typeof chrome !== 'undefined') {
 				postResponse(response) {
 					window.postMessage(response, REVIEW_ORIGIN);
 				}
+			}).catch(() => {
+				// Ignore stale bridge calls after an unpacked extension reload.
 			});
 		});
 
-		chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-			if (isWebBridgePing(message)) {
-				sendResponse({ ok: true });
-				return;
-			}
-			if (!isWebBridgeStatePush(message)) return;
-			window.postMessage(createExtensionStateUpdate(message.state), REVIEW_ORIGIN);
-		});
+		if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+			chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+				if (isWebBridgePing(message)) {
+					sendResponse({ ok: true });
+					return;
+				}
+				if (!isWebBridgeStatePush(message)) return;
+				window.postMessage(createExtensionStateUpdate(message.state), REVIEW_ORIGIN);
+			});
+		}
 	}
 }
 

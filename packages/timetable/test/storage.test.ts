@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createProfileStore, type KeyValueStorage, type SyncProfile } from '../src/storage.ts';
+import {
+	createBrowserStorage,
+	createProfileStore,
+	type KeyValueStorage,
+	type SyncProfile
+} from '../src/storage.ts';
 
 class MemoryStorage implements KeyValueStorage {
 	private values = new Map<string, unknown>();
@@ -42,5 +47,18 @@ describe('local profile storage', () => {
 		const storage = new MemoryStorage();
 		await storage.set('bkalendar-next:profiles', [{ ...profile, schemaVersion: 99 }]);
 		await assert.rejects(createProfileStore(storage).list(), /phiên bản dữ liệu/);
+	});
+
+	it('reports corrupted browser storage with a domain error', async () => {
+		const storage = {
+			getItem: () => '{not-json',
+			setItem: () => undefined,
+			removeItem: () => undefined
+		} as unknown as Storage;
+
+		await assert.rejects(
+			createBrowserStorage(storage).get('bkalendar-next:profiles'),
+			/Dữ liệu BKalendar đã hỏng/
+		);
 	});
 });

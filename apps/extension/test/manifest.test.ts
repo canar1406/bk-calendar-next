@@ -51,7 +51,8 @@ describe('MV3 manifest', () => {
 			'alarms',
 			'notifications',
 			'identity',
-			'scripting'
+			'scripting',
+			'offscreen'
 		]);
 		assert.deepEqual(manifest.host_permissions, [
 			myBkAppUrl,
@@ -91,10 +92,11 @@ describe('MV3 manifest', () => {
 		assert.deepEqual(manifest.content_scripts, [
 			{
 				matches: [myBkTimetableUrl],
-				js: ['content.js']
+				js: ['content.js'],
+				all_frames: true
 			},
 			{
-				matches: [myBkLegacyUrl, lecturerUrl, postgraduateUrl],
+				matches: [myBkLegacyUrl, hcmutSsoUrl, lecturerUrl, postgraduateUrl],
 				js: ['content.js']
 			},
 			{

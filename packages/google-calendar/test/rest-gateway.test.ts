@@ -53,6 +53,25 @@ describe('Google Calendar REST payload', () => {
 		]);
 	});
 
+	it('finds legacy calendars on later calendar-list pages', async () => {
+		const fetcher: typeof fetch = async (input) => {
+			const url = new URL(String(input));
+			if (url.searchParams.get('pageToken') === 'next-page') {
+				return response({
+					items: [{ id: 'legacy-student', summary: 'SV261' }]
+				});
+			}
+			return response({
+				items: [{ id: 'first-page-calendar', summary: 'Unrelated' }],
+				nextPageToken: 'next-page'
+			});
+		};
+
+		assert.deepEqual(await findLegacyCalendars(fetcher, 'token', 'student-2024', 261), [
+			{ id: 'legacy-student' }
+		]);
+	});
+
 	it('identifies expired or unauthorized Google tokens without classifying ordinary API errors', () => {
 		assert.equal(
 			isGoogleCalendarAuthError(new Error('Google Calendar API 401: Invalid Credentials')),

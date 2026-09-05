@@ -24,6 +24,10 @@ function createFakeApi(calls: string[]): {
 	let listener: HiddenTabUpdateListener | undefined;
 	return {
 		api: {
+			async createTab(properties) {
+				calls.push(`create-tab:${properties.url}:${String(properties.active)}`);
+				return { id: 42 };
+			},
 			async createWindow(properties) {
 				calls.push(
 					`create-window:${properties.url}:${String(properties.focused)}:${properties.state}:${properties.type}`
@@ -83,9 +87,8 @@ describe('hidden MyBK tab capture', () => {
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		assert.deepEqual(calls.slice(0, 5), [
-			'create-window:about:blank:false:normal:popup',
-			'update-window:99:false:minimized',
+		assert.deepEqual(calls.slice(0, 4), [
+			'create-tab:about:blank:false',
 			'capture:wait:42',
 			'listener:add',
 			`update:42:${MYBK_TIMETABLE_URL}`
@@ -95,7 +98,7 @@ describe('hidden MyBK tab capture', () => {
 		const result = await pending;
 
 		assert.equal(result.raw, 'captured');
-		assert.deepEqual(calls.slice(-2), ['listener:remove', 'remove-window:99']);
+		assert.deepEqual(calls.slice(-2), ['listener:remove', 'remove:42']);
 	});
 
 	it('returns an authenticated /app landing page to the exact timetable URL', async () => {
@@ -270,7 +273,7 @@ describe('hidden MyBK tab capture', () => {
 				}),
 			/capture failed/
 		);
-		assert.deepEqual(calls.slice(-2), ['listener:remove', 'remove-window:99']);
+		assert.deepEqual(calls.slice(-2), ['listener:remove', 'remove:42']);
 	});
 
 	it('rejects a tracked capture immediately when the content script reports an error', async () => {

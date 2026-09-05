@@ -13,6 +13,7 @@ import {
 import { isContentMessage, isPopupMessage, type PopupMessage } from '../shared/messages.ts';
 import { createChromeStorage } from '../storage/chrome.ts';
 import { createChromeCredentialVault } from '../auth/chrome-vault.ts';
+import type { MyBkCredentials } from '../auth/credential-vault.ts';
 import {
 	decideTrackingAction,
 	isTrackingMode,
@@ -80,6 +81,7 @@ import {
 	syncPresentationWithCalendarRecovery,
 	throwIfCalendarMissing
 } from './presentation-recovery.ts';
+import { createFetchMyBkHttpClient, fetchMyBkTimetable } from './mybk-client.ts';
 
 const TRACKING_ALARM = 'bkalendar-next:track-mybk';
 const TRACKING_MODE_KEY = 'bkalendar-next:tracking-mode';
@@ -93,6 +95,10 @@ const appearanceSyncRuns = new Map<string, Promise<void>>();
 const appearanceWritesInFlight = new Set<string>();
 const recentAppearanceSyncs = new Map<string, { fingerprint: string; completedAt: number }>();
 const hiddenCaptureRegistry = createHiddenCaptureRegistry();
+let offscreenCaptureWaiter:
+	| { resolve(capture: Parameters<typeof stageMyBkCapture>[1]): void; reject(error: unknown): void }
+	| undefined;
+let offscreenCredentials: MyBkCredentials | undefined;
 const googleTokenStore = createGoogleTokenStore(
 	selectTokenStorageArea(chrome.storage.session, createMemoryTokenStorageArea())
 );
@@ -526,31 +532,116 @@ async function performBackgroundTracking(force: boolean): Promise<void> {
 	const sourceKind = await readSelectedSourceKind();
 	try {
 		const source = sourceOptionFor(sourceKind);
-		const capture = await captureInHiddenTab({
-			api: {
-				createWindow: (properties) => chrome.windows.create(properties),
-				updateWindow: (windowId, properties) => chrome.windows.update(windowId, properties),
-				update: (tabId, properties) => chrome.tabs.update(tabId, properties),
-				remove: (tabId) => chrome.tabs.remove(tabId),
-				removeWindow: (windowId) => chrome.windows.remove(windowId),
-				onUpdated: chrome.tabs.onUpdated
-			},
-			url: source.url,
-			sourceKind,
-			credentials,
-			waitForCapture: (tabId) => hiddenCaptureRegistry.wait(tabId, 30_000),
-			registerSessionExpired: (tabId, handler) =>
-				hiddenCaptureRegistry.registerSessionExpired(tabId, handler),
-			cancelCapture: (tabId, error) => hiddenCaptureRegistry.reject(tabId, error),
-			submitCredentials: (tabId, savedCredentials) =>
-				submitCasCredentials(chrome.scripting, tabId, savedCredentials)
-		});
+		const capture =
+			sourceKind === 'student-2024'
+				? await captureStudent2024Offscreen(source.url, credentials)
+				: await captureInHiddenTab({
+						api: {
+							createTab: (properties) => chrome.tabs.create(properties),
+							createWindow: (properties) => chrome.windows.create(properties),
+							updateWindow: (windowId, properties) => chrome.windows.update(windowId, properties),
+							update: (tabId, properties) => chrome.tabs.update(tabId, properties),
+							remove: (tabId) => chrome.tabs.remove(tabId),
+							removeWindow: (windowId) => chrome.windows.remove(windowId),
+							onUpdated: chrome.tabs.onUpdated
+						},
+						url: source.url,
+						sourceKind,
+						credentials,
+						waitForCapture: (tabId) => hiddenCaptureRegistry.wait(tabId, 30_000),
+						registerSessionExpired: (tabId, handler) =>
+							hiddenCaptureRegistry.registerSessionExpired(tabId, handler),
+						cancelCapture: (tabId, error) => hiddenCaptureRegistry.reject(tabId, error),
+						submitCredentials: (tabId, savedCredentials) =>
+							submitCasCredentials(chrome.scripting, tabId, savedCredentials)
+					});
 		await processCapture(capture, mode);
 	} catch (error) {
 		const now = new Date().toISOString();
 		await persistStatus(createErrorStatus(error, now, sourceKind));
 		await notifyTrackingError('BKalendar chưa thể cập nhật', safeMessage(error));
 		if (force) throw error;
+	}
+}
+
+async function captureStudent2024Offscreen(
+	url: string,
+	credentials: MyBkCredentials
+): Promise<Parameters<typeof stageMyBkCapture>[1]> {
+	await ensureOffscreenDocument();
+	try {
+		offscreenCredentials = credentials;
+		const capture = await new Promise<Parameters<typeof stageMyBkCapture>[1]>((resolve, reject) => {
+			offscreenCaptureWaiter = { resolve, reject };
+			void chrome.runtime
+				.sendMessage({ type: 'bkalendar:offscreen:navigate', url })
+				.then((response) => {
+					if (!response?.ok) reject(new Error(response?.message ?? 'Không tạo được vùng đọc MyBK ẩn.'));
+				})
+				.catch(reject);
+			setTimeout(() => {
+				if (offscreenCaptureWaiter?.reject === reject) {
+					offscreenCaptureWaiter = undefined;
+					reject(new Error('MyBK không trả về bảng TKB trong vùng đọc ẩn.'));
+				}
+			}, 30_000);
+		});
+		return capture;
+	} finally {
+		offscreenCaptureWaiter = undefined;
+		offscreenCredentials = undefined;
+		await chrome.offscreen.closeDocument().catch(() => {});
+	}
+}
+
+async function ensureOffscreenDocument(): Promise<void> {
+	const hasDocument = await chrome.offscreen.hasDocument?.();
+	if (hasDocument) return;
+	await chrome.offscreen.createDocument({
+		url: 'src/offscreen/index.html',
+		reasons: ['DOM_SCRAPING'],
+		justification: 'Đọc bảng thời khóa biểu MyBK trong vùng nền không hiển thị.'
+	});
+}
+
+async function fetchStudent2024WithFallback(
+	url: string,
+	credentials: MyBkCredentials
+): Promise<Parameters<typeof stageMyBkCapture>[1]> {
+	try {
+		return await fetchMyBkTimetable(createFetchMyBkHttpClient(), credentials);
+	} catch (fetchError) {
+		// Some MyBK deployments return only the authenticated app shell to a
+		// service-worker fetch and render the timetable after browser-side
+		// navigation. Retry through the inactive-tab DOM path before reporting
+		// the fetch error to the user.
+		try {
+			return await captureInHiddenTab({
+				api: {
+					createTab: (properties) => chrome.tabs.create(properties),
+					createWindow: (properties) => chrome.windows.create(properties),
+					updateWindow: (windowId, properties) => chrome.windows.update(windowId, properties),
+					update: (tabId, properties) => chrome.tabs.update(tabId, properties),
+					remove: (tabId) => chrome.tabs.remove(tabId),
+					removeWindow: (windowId) => chrome.windows.remove(windowId),
+					onUpdated: chrome.tabs.onUpdated
+				},
+				url,
+				sourceKind: 'student-2024',
+				credentials,
+				waitForCapture: (tabId) => hiddenCaptureRegistry.wait(tabId, 30_000),
+				registerSessionExpired: (tabId, handler) =>
+					hiddenCaptureRegistry.registerSessionExpired(tabId, handler),
+				cancelCapture: (tabId, error) => hiddenCaptureRegistry.reject(tabId, error),
+				submitCredentials: (tabId, savedCredentials) =>
+					submitCasCredentials(chrome.scripting, tabId, savedCredentials)
+			});
+		} catch (tabError) {
+			throw new Error(
+				'MyBK chưa trả về được bảng thời khóa biểu. Hãy mở MyBK một lần, kiểm tra đúng tài khoản, rồi thử lại.',
+				{ cause: tabError instanceof Error ? tabError : fetchError }
+			);
+		}
 	}
 }
 
@@ -712,6 +803,11 @@ async function handleContentMessage(
 	let status: ExtensionStatus;
 	if (message.type === 'bkalendar:capture') {
 		try {
+			if (typeof tabId !== 'number' && offscreenCaptureWaiter) {
+				offscreenCaptureWaiter.resolve(message.capture);
+				offscreenCaptureWaiter = undefined;
+				return;
+			}
 			const selectedSourceKind = await readSelectedSourceKind();
 			if (
 				message.capture.sourceKind !== undefined &&
@@ -745,6 +841,14 @@ async function handleContentMessage(
 			return;
 		}
 		if (message.type === 'bkalendar:session-expired') {
+			if (offscreenCaptureWaiter && offscreenCredentials) {
+				await chrome.runtime.sendMessage({
+					type: 'bkalendar:offscreen:submit-credentials',
+					username: offscreenCredentials.username,
+					password: offscreenCredentials.password
+				});
+				return;
+			}
 			const sourceKind = await readSelectedSourceKind();
 			if ((await readTrackingMode()) !== 'off') {
 				await runBackgroundTracking();

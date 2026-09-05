@@ -47,6 +47,7 @@ export type HiddenTabUpdateListener = (
 ) => void;
 
 export interface HiddenTabApi {
+	createTab(properties: HiddenTabCreateProperties): Promise<unknown>;
 	createWindow(properties: HiddenWindowCreateProperties): Promise<unknown>;
 	updateWindow(windowId: number, properties: HiddenWindowUpdateProperties): Promise<unknown>;
 	update(tabId: number, properties: HiddenTabUpdateProperties): Promise<unknown>;
@@ -160,20 +161,11 @@ export async function captureInHiddenTab({
 	cancelCapture,
 	submitCredentials
 }: HiddenTabCaptureOptions): Promise<MyBkCapture> {
-	const hiddenWindow = await api.createWindow({
-		url: BLANK_TAB_URL,
-		focused: false,
-		state: 'normal',
-		type: 'popup'
-	});
-	const windowId = readWindowId(hiddenWindow);
-	const tab = readFirstTab(hiddenWindow);
-	const tabId = readTabId(tab);
-	if (tabId === undefined || windowId === undefined) {
-		if (windowId !== undefined) await api.removeWindow(windowId).catch(() => {});
+	const hiddenTab = await api.createTab({ url: BLANK_TAB_URL, active: false });
+	const tabId = readTabId(hiddenTab);
+	if (tabId === undefined) {
 		throw new Error('Không tạo được cửa sổ nền để đọc MyBK.');
 	}
-	await api.updateWindow(windowId, { focused: false, state: 'minimized' });
 
 	let rejectNavigation!: (error: unknown) => void;
 	const navigationFailure = new Promise<never>((_, reject) => {
@@ -249,7 +241,7 @@ export async function captureInHiddenTab({
 		cancelCapture?.(tabId, terminalError ?? new Error('Lượt đọc TKB trong tab nền đã kết thúc.'));
 		unregisterSessionExpired();
 		api.onUpdated.removeListener(listener);
-		await api.removeWindow(windowId).catch(() => {});
+		await api.remove(tabId).catch(() => {});
 	}
 }
 
@@ -299,16 +291,6 @@ export async function submitCasCredentials(
 function readTabId(tab: unknown): number | undefined {
 	if (!tab || typeof tab !== 'object' || !('id' in tab)) return undefined;
 	return typeof tab.id === 'number' ? tab.id : undefined;
-}
-
-function readWindowId(window: unknown): number | undefined {
-	if (!window || typeof window !== 'object' || !('id' in window)) return undefined;
-	return typeof window.id === 'number' ? window.id : undefined;
-}
-
-function readFirstTab(window: unknown): unknown {
-	if (!window || typeof window !== 'object' || !('tabs' in window)) return undefined;
-	return Array.isArray(window.tabs) ? window.tabs[0] : undefined;
 }
 
 type MyBkRoute = 'timetable' | 'app-home' | 'mybk-login' | 'cas-login' | 'portal-login' | 'unknown';

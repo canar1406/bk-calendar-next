@@ -82,7 +82,12 @@ export function createBrowserStorage(storage: Storage): KeyValueStorage {
 	return {
 		async get<T>(key: string): Promise<T | undefined> {
 			const value = storage.getItem(key);
-			return value === null ? undefined : (JSON.parse(value) as T);
+			if (value === null) return undefined;
+			try {
+				return JSON.parse(value) as T;
+			} catch {
+				throw new Error('Dữ liệu BKalendar đã hỏng. Hãy xuất backup rồi đặt lại ứng dụng.');
+			}
 		},
 		async set<T>(key: string, value: T): Promise<void> {
 			storage.setItem(key, JSON.stringify(value));

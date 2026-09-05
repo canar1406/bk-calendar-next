@@ -128,34 +128,42 @@ export async function findLegacyCalendars(
 			: sourceKind === 'lecturer'
 				? `GV${semester}`
 				: `SV${semester}`;
-	const query = new URLSearchParams({
-		minAccessRole: 'writer',
-		showDeleted: 'false',
-		showHidden: 'true',
-		maxResults: '250'
-	});
-	let response: { items?: GoogleCalendarResource[] };
-	try {
-		response = await requestJson(
-			fetcher,
-			accessToken,
-			`${API_BASE}/users/me/calendarList?${query}`
+	const calendars: Array<{ id: string }> = [];
+	let pageToken: string | undefined;
+	do {
+		const query = new URLSearchParams({
+			minAccessRole: 'writer',
+			showDeleted: 'false',
+			showHidden: 'true',
+			maxResults: '250'
+		});
+		if (pageToken) query.set('pageToken', pageToken);
+		let response: { items?: GoogleCalendarResource[]; nextPageToken?: string };
+		try {
+			response = await requestJson(
+				fetcher,
+				accessToken,
+				`${API_BASE}/users/me/calendarList?${query}`
+			);
+		} catch (error) {
+			if (isInsufficientCalendarListScope(error)) return [];
+			throw error;
+		}
+		calendars.push(
+			...(response.items ?? [])
+				.filter(
+					(calendar) =>
+						calendar.id &&
+						calendar.id !== 'primary' &&
+						!calendar.primary &&
+						!calendar.deleted &&
+						calendar.summary === legacyName
+				)
+				.map((calendar) => ({ id: calendar.id }))
 		);
-	} catch (error) {
-		if (isInsufficientCalendarListScope(error)) return [];
-		throw error;
-	}
-	return (response.items ?? [])
-		.filter(
-			(calendar) =>
-				calendar.id &&
-				calendar.id !== 'primary' &&
-				!calendar.primary &&
-				!calendar.deleted &&
-				calendar.summary === legacyName
-		)
-		.map((calendar) => ({ id: calendar.id }))
-		.sort((left, right) => left.id.localeCompare(right.id));
+		pageToken = response.nextPageToken;
+	} while (pageToken);
+	return calendars.sort((left, right) => left.id.localeCompare(right.id));
 }
 
 export class GoogleCalendarRestGateway implements GoogleCalendarGateway {

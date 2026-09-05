@@ -124,9 +124,12 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		}
 		if (state.theme) {
 			window.localStorage.setItem('bkalendar-next:theme', state.theme);
+			if (state.resolvedTheme) {
+				window.localStorage.setItem('bkalendar-next:theme-resolved', state.resolvedTheme);
+			}
 			window.dispatchEvent(
 				new CustomEvent('bkalendar:theme-updated', {
-					detail: { preference: state.theme }
+					detail: { preference: state.theme, resolvedTheme: state.resolvedTheme }
 				})
 			);
 		}

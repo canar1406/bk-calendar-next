@@ -24,9 +24,23 @@
 			}
 		};
 		const handleExtensionTheme = (event: Event) => {
-			const next = (event as CustomEvent<{ preference?: unknown }>).detail?.preference;
+			const detail = (
+				event as CustomEvent<{
+					preference?: unknown;
+					resolvedTheme?: unknown;
+				}>
+			).detail;
+			const next = detail?.preference;
 			preference = normalizeThemePreference(next);
 			localStorage.setItem(THEME_STORAGE_KEY, preference);
+			if (
+				preference === 'system' &&
+				(detail?.resolvedTheme === 'light' || detail?.resolvedTheme === 'dark')
+			) {
+				localStorage.setItem('bkalendar-next:theme-resolved', detail.resolvedTheme);
+				document.documentElement.dataset.theme = detail.resolvedTheme;
+				return;
+			}
 			applyTheme(document.documentElement, preference, systemQuery?.matches ?? false);
 		};
 		window.addEventListener('bkalendar:theme-updated', handleExtensionTheme);

@@ -42,6 +42,7 @@ export interface ExtensionState {
 	profiles: SyncProfile[];
 	appearances: Record<string, unknown>;
 	theme?: 'light' | 'dark' | 'system';
+	resolvedTheme?: 'light' | 'dark';
 	status: ExtensionStateStatus;
 }
 
