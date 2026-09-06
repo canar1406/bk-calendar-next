@@ -1,37 +1,33 @@
 # BKalendar Next
 
-BKalendar Next giúp sinh viên HCMUT chuyển thời khóa biểu MyBK sang Google
-Calendar hoặc file `.ics`, theo dõi thay đổi lịch học và hạn chế tối đa nguy cơ
-nhân đôi hoặc xóa nhầm sự kiện cá nhân.
+BKalendar Next giúp sinh viên và giảng viên HCMUT chuyển thời khóa biểu sang
+Google Calendar hoặc file `.ics`, xem lịch theo tuần và theo dõi thay đổi
+phòng học, giờ học, tuần học.
 
-Website: <https://canar1406.github.io/bk-calendar-next/>
+Dự án được phát triển kế thừa [BKalendar gốc](https://bkalendar.github.io/),
+với giao diện mới, so sánh thay đổi lịch và extension kiểm tra MyBK định kỳ.
 
-Các bản extension đã phát hành:
-<https://github.com/canar1406/bk-calendar-next/releases/latest>
+[Mở website](https://canar1406.github.io/bk-calendar-next/) ·
+[Tải extension](https://github.com/canar1406/bk-calendar-next/releases/latest)
 
-## Trạng thái bản mã nguồn hiện tại
+## Bản 0.5.6
 
-Extension trong mã nguồn có phiên bản **0.5.6**. Bản này chuyển tracking về
-**tab inactive** và bỏ thử nghiệm offscreen. Tab tạm vẫn có thể xuất hiện trên
-thanh tab; đây **không phải chế độ ẩn hoàn toàn**.
+- Kiểm tra lịch bằng tab nền, không tạo cửa sổ riêng. Tab tạm vẫn xuất hiện
+  trên thanh tab và tự đóng sau lượt đọc.
+- Hiển thị **“Lịch đã khớp Google Calendar”** khi đồng bộ xong mà không có
+  thay đổi mới.
+- Phân biệt **“Đã đồng bộ”**, **“Chưa đồng bộ”**, **“Đã xóa”** và **“Có thể xóa”**
+  trong phần tóm tắt.
 
-Các thay đổi đang có:
+## Giới hạn cần biết
 
-- Dùng tab `active: false` để đọc trang lịch và xử lý đăng nhập.
-- Đóng tab tạm sau khi nhận được lịch hoặc lượt capture kết thúc bằng lỗi.
-- Bỏ permission, tài liệu HTML và bước build offscreen.
-- Sửa popup: khi Google sync hoàn tất với 0 thao tác ghi, hiển thị
-  **“Lịch đã khớp Google Calendar”** và **“Đã đồng bộ”**.
-- Phân biệt **“Đã xóa”** sau khi áp dụng với **“Có thể xóa”** khi còn chờ duyệt.
-- Giữ nguyên ba scope Google Calendar được liệt kê bên dưới.
-
-Source trên nhánh `main`, ZIP build cục bộ và GitHub Release là ba trạng thái
-khác nhau. Push source không tự thay bản extension đang cài trên máy. Hãy kiểm
-tra phiên bản của Release/artifact trước khi tải; mục Releases có thể chưa có
-ZIP trùng với phiên bản source mới nhất.
-
-Đợt rà soát toàn bộ source chưa hoàn tất. Test tự động và build không thay thế
-kiểm thử MyBK/CAS, Chrome/Edge và Google Calendar bằng tài khoản thật.
+- Extension chưa chạy ẩn hoàn toàn: tab nền có thể xuất hiện tạm thời.
+- Kiểm tra định kỳ cần trình duyệt đang chạy, có mạng và phiên đăng nhập hợp lệ.
+- Apple Calendar chỉ hỗ trợ nhập file `.ics` một lần.
+- Các portal HCMUT có thể thay đổi giao diện hoặc cách đăng nhập, ảnh hưởng
+  đến việc đọc lịch.
+- Chưa kiểm thử đầy đủ mọi loại tài khoản và mọi tình huống đăng nhập,
+  migration trên Chrome/Edge. Nên kiểm tra kết quả trước khi dùng với dữ liệu quan trọng.
 
 ## Tính năng chính
 
@@ -80,6 +76,27 @@ kiểm thử MyBK/CAS, Chrome/Edge và Google Calendar bằng tài khoản thậ
 
 Extension chỉ xin các quyền cần thiết cho bộ nhớ cục bộ, thông báo, Google
 Calendar và các trang MyBK/CAS phục vụ việc theo dõi trong nền.
+
+## Sử dụng website
+
+1. Mở trang thời khóa biểu HCMUT và chọn học kỳ cần dùng.
+2. Sao chép nội dung gồm thông tin học kỳ, tiêu đề bảng, toàn bộ dòng lịch và
+   phần tổng số dòng ở cuối bảng nếu có. Không sao chép mật khẩu hoặc cookie.
+3. Mở BKalendar Next, chọn đúng loại lịch rồi dán nội dung vào ô nhập.
+4. Nhập lịch và kiểm tra bản xem trước theo tuần cùng phần thay đổi.
+5. Chọn màu, icon cho từng môn nếu muốn.
+6. Chọn đồng bộ Google Calendar hoặc tải `.ics` để nhập vào ứng dụng lịch khác.
+
+Dữ liệu mẫu chỉ dùng để xem trước, không dùng để xuất hoặc đồng bộ lịch thật.
+
+## Thiết lập extension
+
+1. Mở popup BKalendar Next, chọn đúng loại lịch.
+2. Mở **Thiết lập tự động**, nhập tài khoản MyBK và tích đồng ý lưu đăng nhập
+   cục bộ nếu muốn dùng tính năng theo dõi nền.
+3. Chọn chế độ cập nhật và chu kỳ kiểm tra.
+4. Kết nối Google Calendar nếu muốn tự động đồng bộ.
+5. Bấm **Lưu và kiểm tra ngay**, sau đó xem trạng thái và phần tóm tắt thay đổi.
 
 ### Cập nhật bản đã giải nén
 
@@ -135,10 +152,8 @@ Người dùng chỉnh màu và icon trên website BKalendar. Khi website chính
 4. Cấu hình hợp lệ được lưu vào `chrome.storage.local`.
 5. Lần cập nhật MyBK tiếp theo sẽ dùng đúng màu và icon đã chọn.
 
-Không sử dụng file cấu hình ẩn. Chrome và Edge không cho phép extension tự tìm
-kiếm tùy ý trong ổ đĩa nếu không xin thêm quyền truy cập tệp. Cơ chế truyền trực
-tiếp trong trình duyệt an toàn hơn, không cần máy chủ và không tải cấu hình của
-người dùng lên Internet.
+Việc trao đổi cấu hình giữa web và extension diễn ra trong trình duyệt,
+không qua máy chủ BKalendar.
 
 Extension chỉ chấp nhận cấu hình từ:
 
@@ -230,9 +245,15 @@ https://www.googleapis.com/auth/calendar.app.created
 
 `calendar.events` phục vụ thao tác event, bao gồm migration lịch cũ;
 `calendar.calendarlist.readonly` dùng tìm lịch; `calendar.app.created` dùng
-tạo và quản lý lịch riêng của app. Không tự hạ scope để che cảnh báo OAuth.
-Trạng thái xét duyệt phải được kiểm tra trực tiếp trong Google Cloud Console;
-source hoặc ZIP build thành công không chứng minh app đã được Google xác minh.
+tạo và quản lý lịch riêng của app.
+
+### Cảnh báo khi đăng nhập Google
+
+Nếu Google hiển thị **“Ứng dụng chưa được xác minh”**, mọi người nên đọc kỹ
+các quyền được yêu cầu trước khi quyết định kết nối. Bản này yêu cầu quyền
+Calendar để đồng bộ và chuyển lịch cũ; việc phát hành trên GitHub không đồng
+nghĩa ứng dụng đã được Google xác minh. Nếu chưa muốn cấp quyền, có thể dùng
+chức năng tải `.ics` mà không kết nối Google.
 
 Khi dùng bản extension unpacked hiện tại trên Edge/Chrome, OAuth client loại
 **Web application** dùng cho luồng đăng nhập extension phải có Authorized
@@ -270,9 +291,10 @@ Calendar. Dự án chưa cung cấp WebCal, CalDAV hoặc đồng bộ Apple Cal
 
 ## Repository tham chiếu
 
-Hai repository BKalendar cũ chỉ được sử dụng làm nguồn tham khảo về parser và
-hành vi sản phẩm. Không chỉnh sửa trực tiếp các repository đó trong quá trình
-phát triển BKalendar Next.
+- [Giao diện BKalendar gốc](https://github.com/bkalendar/bkalendar.github.io)
+- [Bộ xử lý thời khóa biểu BKalendar](https://github.com/bkalendar/core)
+
+Cảm ơn các tác giả BKalendar đã chia sẻ mã nguồn và đặt nền tảng cho dự án này.
 
 ## Giấy phép và ghi công
 
