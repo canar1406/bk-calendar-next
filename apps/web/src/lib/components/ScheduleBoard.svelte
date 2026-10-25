@@ -29,31 +29,58 @@
 		hour: '2-digit',
 		minute: '2-digit'
 	});
+	const examDateFormatter = new Intl.DateTimeFormat('vi-VN', {
+		timeZone: calendarTimeZone,
+		day: '2-digit',
+		month: '2-digit',
+		year: 'numeric'
+	});
+
+	const ALL_EXAM_WEEKS_KEY = 'all';
 
 	let weeks: ScheduleWeek[] = [];
+	let allOccurrences: ManagedEvent[] = [];
 	let selectedWeekIndex = -1;
 	let selectedWeek: ScheduleWeek | undefined;
+	let selectedWeekLabel = '';
 	let visibleEvents: ManagedEvent[] = [];
 	let previousEventsSignature: string | undefined;
 	let weekPickerElement: HTMLDetailsElement | undefined;
 
-	$: eventsSignature = events
+	$: eventsSignature = `${scheduleKind}|${events
 		.map(
 			(event) =>
 				`${event.stableKey}:${event.fingerprint ?? ''}:${event.start}:${event.end}:${event.activeWeekIndexes.join(',')}`
 		)
-		.join('|');
+		.join('|')}`;
 	$: if (eventsSignature !== previousEventsSignature) {
 		previousEventsSignature = eventsSignature;
 		weeks = buildScheduleWeeks(events);
-		selectedWeekKey = selectDefaultScheduleWeek(weeks)?.key ?? '';
+		allOccurrences = weeks
+			.flatMap((week) => week.events)
+			.sort((left, right) => left.weekday - right.weekday || left.start.localeCompare(right.start));
+		selectedWeekKey =
+			scheduleKind === 'exams' && weeks.length > 0
+				? ALL_EXAM_WEEKS_KEY
+				: (selectDefaultScheduleWeek(weeks)?.key ?? '');
 	}
 	$: selectedWeekIndex = weeks.findIndex((week) => week.key === selectedWeekKey);
 	$: selectedWeek = selectedWeekIndex >= 0 ? weeks[selectedWeekIndex] : undefined;
-	$: visibleEvents = selectedWeek?.events ?? [];
+	$: selectedWeekLabel =
+		scheduleKind === 'exams' && selectedWeekKey === ALL_EXAM_WEEKS_KEY
+			? `Tất cả các tuần (${allOccurrences.length} ca thi)`
+			: (selectedWeek?.label ?? 'Chưa có tuần học');
+	$: visibleEvents =
+		scheduleKind === 'exams' && selectedWeekKey === ALL_EXAM_WEEKS_KEY
+			? allOccurrences
+			: (selectedWeek?.events ?? []);
 
 	function timeRange(event: ManagedEvent): string {
-		return `${timeFormatter.format(new Date(event.start))}–${timeFormatter.format(new Date(event.end))}`;
+		const range = `${timeFormatter.format(new Date(event.start))}–${timeFormatter.format(new Date(event.end))}`;
+		if (scheduleKind === 'exams' || event.scheduleKind === 'exams') {
+			return `${examDateFormatter.format(new Date(event.start))} · ${range}`;
+		}
+		return range;
 	}
 
 	function eventColor(event: ManagedEvent, assignments: Record<string, string>): string {
@@ -65,11 +92,20 @@
 	}
 
 	function showPreviousWeek(): void {
+		if (scheduleKind === 'exams' && selectedWeekIndex === 0) {
+			selectedWeekKey = ALL_EXAM_WEEKS_KEY;
+			return;
+		}
 		const previousWeek = weeks[selectedWeekIndex - 1];
 		if (previousWeek) selectedWeekKey = previousWeek.key;
 	}
 
 	function showNextWeek(): void {
+		if (scheduleKind === 'exams' && selectedWeekKey === ALL_EXAM_WEEKS_KEY) {
+			const firstWeek = weeks[0];
+			if (firstWeek) selectedWeekKey = firstWeek.key;
+			return;
+		}
 		const nextWeek = weeks[selectedWeekIndex + 1];
 		if (nextWeek) selectedWeekKey = nextWeek.key;
 	}
@@ -97,7 +133,7 @@
 		<div>
 			<p class="section-number">02</p>
 			<h2 id="schedule-title">
-				{scheduleKind === 'exams' ? 'Lịch thi theo tuần' : 'Lịch học cả học kỳ'}
+				{scheduleKind === 'exams' ? 'Lịch thi cả học kỳ' : 'Lịch học cả học kỳ'}
 			</h2>
 		</div>
 		<p>Xem trước theo từng tuần · Múi giờ {calendarTimeZone}</p>
@@ -106,14 +142,14 @@
 	<div class="schedule-toolbar">
 		<p>
 			{scheduleKind === 'exams'
-				? 'Bảng chỉ hiển thị ca thi trong tuần đang chọn. File .ics và ảnh lịch thi bao gồm tất cả ca thi đã có ngày.'
+				? 'Mặc định hiển thị tất cả ca thi trong học kỳ kèm ngày thi cụ thể (hoặc chọn từng tuần để lọc). File .ics, Google Calendar và ảnh lịch thi luôn bao gồm tất cả ca thi đã có ngày.'
 				: 'Dữ liệu bao phủ toàn bộ học kỳ; bảng bên dưới chỉ hiển thị các buổi học có trong tuần đang chọn.'}
 		</p>
 		<nav class="week-navigation" aria-label="Chọn tuần xem trước">
 			<button
 				type="button"
 				on:click={showPreviousWeek}
-				disabled={selectedWeekIndex <= 0}
+				disabled={scheduleKind === 'exams' ? selectedWeekIndex < 0 : selectedWeekIndex <= 0}
 				aria-label="Xem tuần trước"
 			>
 				<span aria-hidden="true">←</span>
@@ -123,10 +159,21 @@
 				<span class="week-picker-label">Tuần hiển thị</span>
 				<details class="week-picker" bind:this={weekPickerElement}>
 					<summary aria-label="Chọn tuần hiển thị" aria-haspopup="listbox">
-						<span>{selectedWeek?.label ?? 'Chưa có tuần học'}</span>
+						<span>{selectedWeekLabel}</span>
 						<span class="week-picker-chevron" aria-hidden="true"></span>
 					</summary>
 					<div class="week-menu-panel" role="listbox" aria-label="Các tuần trong học kỳ">
+						{#if scheduleKind === 'exams' && weeks.length > 0}
+							<button
+								type="button"
+								class="week-menu-option"
+								role="option"
+								aria-selected={selectedWeekKey === ALL_EXAM_WEEKS_KEY}
+								on:click={() => selectWeek(ALL_EXAM_WEEKS_KEY)}
+							>
+								Tất cả các tuần ({allOccurrences.length} ca thi)
+							</button>
+						{/if}
 						{#each weeks as week}
 							<button
 								type="button"
@@ -144,7 +191,9 @@
 			<button
 				type="button"
 				on:click={showNextWeek}
-				disabled={selectedWeekIndex < 0 || selectedWeekIndex >= weeks.length - 1}
+				disabled={scheduleKind === 'exams'
+					? weeks.length === 0 || selectedWeekIndex >= weeks.length - 1
+					: selectedWeekIndex < 0 || selectedWeekIndex >= weeks.length - 1}
 				aria-label="Xem tuần sau"
 			>
 				<span>Sau</span>
@@ -153,8 +202,8 @@
 		</nav>
 	</div>
 
-	{#if selectedWeek}
-		<p class="selected-week" aria-live="polite">{selectedWeek.label}</p>
+	{#if selectedWeek || (scheduleKind === 'exams' && selectedWeekKey === ALL_EXAM_WEEKS_KEY)}
+		<p class="selected-week" aria-live="polite">{selectedWeekLabel}</p>
 	{/if}
 
 	<div class="week-grid">

@@ -113,12 +113,13 @@ export const WALLPAPER_MOTTOS = [
 
 export const WALLPAPER_EXAM_PHASES = {
 	midterm: 'Thi Giữa kỳ (GK)',
-	final: 'Thi Cuối kỳ (CK)'
+	final: 'Thi Cuối kỳ (CK)',
+	all: 'Tất cả ca thi (GK + CK)'
 } as const;
 
 export type WallpaperExamPhase = keyof typeof WALLPAPER_EXAM_PHASES;
 
-export function classifyExamPhase(event: ManagedEvent): WallpaperExamPhase | 'other' {
+export function classifyExamPhase(event: ManagedEvent): 'midterm' | 'final' | 'other' {
 	const raw = `${event.metadata?.examType ?? ''} ${event.title}`.trim();
 	if (/^(?:gk|giữa\s*k[ỳì]|btl)\b/iu.test(raw)) return 'midterm';
 	if (/^(?:ck|cuối\s*k[ỳì]|thi\s*cuối)\b/iu.test(raw)) return 'final';
@@ -129,6 +130,7 @@ export function getAvailableExamPhases(events: ManagedEvent[]): WallpaperExamPha
 	const phases: WallpaperExamPhase[] = [];
 	if (events.some((event) => classifyExamPhase(event) === 'midterm')) phases.push('midterm');
 	if (events.some((event) => classifyExamPhase(event) === 'final')) phases.push('final');
+	if (events.length > 0) phases.push('all');
 	return phases;
 }
 
@@ -196,7 +198,10 @@ export function buildWallpaperModel(
 	if (exams) {
 		const midtermEvents = allEvents.filter((event) => classifyExamPhase(event) === 'midterm');
 		const finalEvents = allEvents.filter((event) => classifyExamPhase(event) === 'final');
-		if (options.examPhase === 'final' && finalEvents.length > 0) {
+		if (options.examPhase === 'all') {
+			examPhase = 'all';
+			events = allEvents;
+		} else if (options.examPhase === 'final' && finalEvents.length > 0) {
 			examPhase = 'final';
 			events = finalEvents;
 		} else if (options.examPhase === 'midterm' && midtermEvents.length > 0) {
@@ -208,8 +213,11 @@ export function buildWallpaperModel(
 		} else if (finalEvents.length > 0) {
 			examPhase = 'final';
 			events = finalEvents;
+		} else {
+			examPhase = 'all';
+			events = allEvents;
 		}
-		if (midtermEvents.length > 0 || finalEvents.length > 0) {
+		if (examPhase !== 'all' && (midtermEvents.length > 0 || finalEvents.length > 0)) {
 			examTitle = examPhase === 'final' ? 'LỊCH THI CUỐI KỲ' : 'LỊCH THI GIỮA KỲ';
 			examSubtitle =
 				examPhase === 'final'
