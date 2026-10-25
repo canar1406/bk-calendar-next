@@ -70,7 +70,11 @@ import {
 	isWebBridgeRuntimeRequest,
 	type WebBridgeStatePush
 } from '../shared/web-bridge-runtime.ts';
-import { ensureWebBridgeConnection, WEB_APP_URL_PATTERN } from './web-bridge-presence.ts';
+import {
+	ensureWebBridgeConnection,
+	LOCAL_WEB_APP_URL_PATTERNS,
+	WEB_APP_URL_PATTERN
+} from './web-bridge-presence.ts';
 import {
 	SELECTED_SOURCE_KIND_KEY,
 	normalizeSelectedSourceKind,
@@ -84,6 +88,7 @@ import {
 const TRACKING_ALARM = 'bkalendar-next:track-mybk';
 const TRACKING_MODE_KEY = 'bkalendar-next:tracking-mode';
 const POLLING_INTERVAL_KEY = 'bkalendar-next:polling-interval-minutes';
+const GOOGLE_CONNECTED_KEY = 'bkalendar-next:google-connected';
 const THEME_STORAGE_KEY = 'bkalendar-next:theme';
 const THEME_RESOLVED_STORAGE_KEY = 'bkalendar-next:theme-resolved';
 const COURSE_APPEARANCE_STORAGE_PREFIX = 'bkalendar-next:course-colors:';
@@ -250,9 +255,11 @@ async function broadcastWebState(): Promise<void> {
 		type: 'bkalendar:web-bridge:state:push',
 		state
 	};
-	const tabs = await chrome.tabs.query({
-		url: WEB_APP_URL_PATTERN
-	});
+	const patterns = [WEB_APP_URL_PATTERN, ...LOCAL_WEB_APP_URL_PATTERNS];
+	const tabGroups = await Promise.all(
+		patterns.map(async (url) => await chrome.tabs.query({ url }).catch(() => []))
+	);
+	const tabs = tabGroups.flat();
 	await Promise.all(
 		tabs.map(async (tab) => {
 			if (typeof tab.id !== 'number') return;
@@ -369,9 +376,10 @@ async function recoverCalendarForProfile(
 		await store.save({ ...profile, calendarId: managed.id, calendarOrigin: 'managed' });
 		return managed.id;
 	}
-	const legacy = (
-		await findLegacyCalendars(fetch, accessToken, profile.sourceKind, profile.semester)
-	)[0];
+	const legacy =
+		profile.scheduleKind === 'exams'
+			? undefined
+			: (await findLegacyCalendars(fetch, accessToken, profile.sourceKind, profile.semester))[0];
 	if (legacy?.id) {
 		await store.save({ ...profile, calendarId: legacy.id, calendarOrigin: 'legacy' });
 		return legacy.id;
@@ -420,6 +428,7 @@ async function handlePopupMessage(message: PopupMessage): Promise<{
 	}
 	if (message.type === 'bkalendar:google:connect') {
 		await requestGoogleToken(chrome.identity, true, GOOGLE_WEB_CLIENT_ID, googleTokenStore);
+		await chrome.storage.local.set({ [GOOGLE_CONNECTED_KEY]: true });
 		return {
 			configured: await vault.hasCredentials(),
 			trackingMode: await readTrackingMode(),
@@ -429,6 +438,7 @@ async function handlePopupMessage(message: PopupMessage): Promise<{
 	}
 	if (message.type === 'bkalendar:google:disconnect') {
 		await disconnectGoogle(chrome.identity, googleTokenStore);
+		await chrome.storage.local.set({ [GOOGLE_CONNECTED_KEY]: false });
 		return {
 			configured: await vault.hasCredentials(),
 			trackingMode: await readTrackingMode(),
@@ -479,6 +489,7 @@ async function handlePopupMessage(message: PopupMessage): Promise<{
 		if (requiresGoogleConnection(message.trackingMode)) {
 			try {
 				await requestGoogleToken(chrome.identity, true, GOOGLE_WEB_CLIENT_ID, googleTokenStore);
+				await chrome.storage.local.set({ [GOOGLE_CONNECTED_KEY]: true });
 			} catch {
 				throw new Error(
 					'Chế độ tự động cần Google Calendar. Hãy bấm “Kết nối” và cấp quyền trước khi bật.'
@@ -722,7 +733,9 @@ async function handleContentMessage(
 				if (typeof tabId === 'number' && hiddenCaptureRegistry.reject(tabId, mismatch)) {
 					return;
 				}
-				throw new Error('Bảng thời khóa biểu không khớp với loại lịch đang theo dõi.');
+				await chrome.storage.local.set({
+					[SELECTED_SOURCE_KIND_KEY]: message.capture.sourceKind
+				});
 			}
 			if (typeof tabId === 'number' && hiddenCaptureRegistry.resolve(tabId, message.capture)) {
 				return;
@@ -798,12 +811,20 @@ function safeMessage(error: unknown): string {
 }
 
 async function hasGoogleConnection(): Promise<boolean> {
-	try {
-		await requestGoogleToken(chrome.identity, false, GOOGLE_WEB_CLIENT_ID, googleTokenStore);
+	const cached = await googleTokenStore.read();
+	if (cached && cached.expiresAt - 60_000 > Date.now()) {
 		return true;
-	} catch {
-		return false;
 	}
+	if (chrome.identity?.getAuthToken) {
+		try {
+			const native = await chrome.identity.getAuthToken({ interactive: false });
+			if (native?.token) return true;
+		} catch {
+			// Fall back to stored connection flag below.
+		}
+	}
+	const stored = await chrome.storage.local.get(GOOGLE_CONNECTED_KEY);
+	return stored[GOOGLE_CONNECTED_KEY] === true;
 }
 
 async function persistDiffLog(log: ReturnType<typeof createDiffLog>): Promise<void> {

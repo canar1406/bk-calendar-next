@@ -1,9 +1,12 @@
 import {
 	createSourceSnapshot,
+	isExamTableHeader,
 	type SourceSnapshotOptions
 } from '../../../../packages/core/src/index.ts';
 import {
 	diffSnapshots,
+	profileIdForSnapshot,
+	type ScheduleKind,
 	type SourceKind,
 	type TimetableDiff,
 	type TimetableSnapshot
@@ -32,7 +35,7 @@ export async function prepareTimetable(
 	const snapshot = await createWorkflowSnapshot(source, options);
 
 	return {
-		profileId: profileIdFor(snapshot),
+		profileId: profileIdForSnapshot(snapshot),
 		snapshot,
 		diff: diffSnapshots(previousSnapshot, snapshot)
 	};
@@ -66,10 +69,6 @@ export async function stageTransferredSnapshot(
 	};
 }
 
-function profileIdFor(snapshot: TimetableSnapshot): string {
-	return `${snapshot.sourceKind}:${snapshot.semester}`;
-}
-
 async function createWorkflowSnapshot(
 	source: string,
 	options: PrepareTimetableOptions
@@ -78,15 +77,33 @@ async function createWorkflowSnapshot(
 	return await createSourceSnapshot(source, sourceKind, snapshotOptions);
 }
 
-export function inferCaptureCompleteness(source: string, sourceKind: SourceKind = 'student-2024') {
+export function inferCaptureCompleteness(
+	source: string,
+	sourceKind: SourceKind = 'student-2024',
+	scheduleKind: ScheduleKind = 'classes'
+) {
 	const normalized = source.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-	const parsedRows = countSourceRows(normalized, sourceKind);
+	const parsedRows =
+		scheduleKind === 'exams' ? countExamRows(normalized) : countSourceRows(normalized, sourceKind);
 	const expectedRows = expectedSourceRows(normalized, sourceKind);
 	if (expectedRows === undefined) return { state: 'unknown' as const, parsedRows };
 
 	return parsedRows >= expectedRows
 		? { state: 'complete' as const, parsedRows, expectedRows }
 		: { state: 'incomplete' as const, parsedRows, expectedRows };
+}
+
+function countExamRows(source: string): number {
+	const lines = source.split('\n');
+	const headerIndex = lines.findIndex(isExamTableHeader);
+	if (headerIndex < 0) return 0;
+	const columns = lines[headerIndex]!.split('\t').length;
+	let count = 0;
+	for (const line of lines.slice(headerIndex + 1)) {
+		if (/^(?:Trình bày|Đang xem|Tổng số|Showing)/iu.test(line.trim())) break;
+		if (line.trim() && line.split('\t').length === columns && !isExamTableHeader(line)) count++;
+	}
+	return count;
 }
 
 function countSourceRows(source: string, sourceKind: SourceKind): number {

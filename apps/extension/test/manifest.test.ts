@@ -35,6 +35,8 @@ const hcmutSsoUrl = 'https://sso.hcmut.edu.vn/cas/login*';
 const lecturerUrl = 'https://tkb.hcmut.edu.vn/*';
 const postgraduateUrl = 'https://grad.hcmut.edu.vn/*';
 const reviewUrl = 'https://canar1406.github.io/bk-calendar-next/*';
+const localhostReviewUrl = 'http://localhost/bk-calendar-next/*';
+const loopbackReviewUrl = 'http://127.0.0.1/bk-calendar-next/*';
 const googleCalendarApiUrl = 'https://www.googleapis.com/calendar/v3/*';
 
 async function readManifest(): Promise<ExtensionManifest> {
@@ -61,6 +63,8 @@ describe('MV3 manifest', () => {
 			lecturerUrl,
 			postgraduateUrl,
 			reviewUrl,
+			localhostReviewUrl,
+			loopbackReviewUrl,
 			googleCalendarApiUrl
 		]);
 		assert.equal(JSON.stringify(manifest).includes('<all_urls>'), false);
@@ -100,7 +104,7 @@ describe('MV3 manifest', () => {
 				all_frames: true
 			},
 			{
-				matches: [reviewUrl],
+				matches: [reviewUrl, localhostReviewUrl, loopbackReviewUrl],
 				js: ['web-review.js']
 			}
 		]);

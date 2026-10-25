@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ManagedEvent } from '../../../../../packages/timetable/src/index.ts';
+	import type { ManagedEvent, ScheduleKind } from '../../../../../packages/timetable/src/index.ts';
 	import {
 		buildScheduleWeeks,
 		selectDefaultScheduleWeek,
@@ -10,6 +10,8 @@
 	export let events: ManagedEvent[] = [];
 	export let colorAssignments: Record<string, string> = {};
 	export let courseIcons: Record<string, string> = {};
+	export let scheduleKind: ScheduleKind = 'classes';
+	export let selectedWeekKey = '';
 
 	const calendarTimeZone = 'Asia/Ho_Chi_Minh';
 	const days = [
@@ -29,7 +31,6 @@
 	});
 
 	let weeks: ScheduleWeek[] = [];
-	let selectedWeekKey = '';
 	let selectedWeekIndex = -1;
 	let selectedWeek: ScheduleWeek | undefined;
 	let visibleEvents: ManagedEvent[] = [];
@@ -55,12 +56,12 @@
 		return `${timeFormatter.format(new Date(event.start))}–${timeFormatter.format(new Date(event.end))}`;
 	}
 
-	function eventColor(event: ManagedEvent): string {
-		return colorForId(colorAssignments[courseIdentity(event)] ?? '7').background;
+	function eventColor(event: ManagedEvent, assignments: Record<string, string>): string {
+		return colorForId(assignments[courseIdentity(event)] ?? '7').background;
 	}
 
-	function eventIcon(event: ManagedEvent): string {
-		return courseIcons[courseIdentity(event)] ?? '';
+	function eventIcon(event: ManagedEvent, icons: Record<string, string>): string {
+		return icons[courseIdentity(event)] ?? '';
 	}
 
 	function showPreviousWeek(): void {
@@ -95,15 +96,18 @@
 	<div class="section-heading">
 		<div>
 			<p class="section-number">02</p>
-			<h2 id="schedule-title">Lịch học cả học kỳ</h2>
+			<h2 id="schedule-title">
+				{scheduleKind === 'exams' ? 'Lịch thi theo tuần' : 'Lịch học cả học kỳ'}
+			</h2>
 		</div>
 		<p>Xem trước theo từng tuần · Múi giờ {calendarTimeZone}</p>
 	</div>
 
 	<div class="schedule-toolbar">
 		<p>
-			Dữ liệu bao phủ toàn bộ học kỳ; bảng bên dưới chỉ hiển thị các buổi học có trong tuần đang
-			chọn.
+			{scheduleKind === 'exams'
+				? 'Bảng chỉ hiển thị ca thi trong tuần đang chọn. File .ics và ảnh lịch thi bao gồm tất cả ca thi đã có ngày.'
+				: 'Dữ liệu bao phủ toàn bộ học kỳ; bảng bên dưới chỉ hiển thị các buổi học có trong tuần đang chọn.'}
 		</p>
 		<nav class="week-navigation" aria-label="Chọn tuần xem trước">
 			<button
@@ -161,10 +165,14 @@
 					{#each visibleEvents.filter((event) => event.weekday === day.weekday) as event}
 						<article
 							class="event-card"
-							style={`--course-color: ${eventColor(event)}; --course-tint: color-mix(in srgb, ${eventColor(event)} 10%, var(--surface-raised));`}
+							style={`--course-color: ${eventColor(event, colorAssignments)}; --course-tint: color-mix(in srgb, ${eventColor(event, colorAssignments)} 10%, var(--surface-raised));`}
 						>
 							<p class="event-time">{timeRange(event)}</p>
-							<h3>{eventIcon(event) ? `${eventIcon(event)} ` : ''}{event.title}</h3>
+							<h3>
+								{eventIcon(event, courseIcons)
+									? `${eventIcon(event, courseIcons)} `
+									: ''}{event.title}
+							</h3>
 							<p class="event-code">{event.courseCode} · {event.group}</p>
 							<p class="event-room">{event.location || 'Chưa có phòng'}</p>
 						</article>

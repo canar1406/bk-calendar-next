@@ -18,7 +18,7 @@
 	</div>
 	<header>
 		<h1>Chính sách quyền riêng tư</h1>
-		<p>Có hiệu lực từ ngày 03/09/2026.</p>
+		<p>Cập nhật ngày 25/10/2026.</p>
 	</header>
 
 	<section>
@@ -33,7 +33,9 @@
 	<section>
 		<h2>Dữ liệu được xử lý</h2>
 		<ul>
-			<li>Nội dung thời khóa biểu mà bạn chủ động dán hoặc mở trên trang MyBK.</li>
+			<li>
+				Nội dung thời khóa biểu hoặc lịch thi mà bạn chủ động dán hoặc mở trên trang được hỗ trợ.
+			</li>
 			<li>Snapshot, lịch sử so sánh và ID lịch Google do BKalendar quản lý.</li>
 			<li>Trạng thái đọc đủ/thiếu dữ liệu và số lượng thay đổi.</li>
 		</ul>
@@ -51,8 +53,20 @@
 		<p>
 			Chỉ khi bạn bấm nút xác nhận đồng bộ, website mới mở Google Identity Services và yêu cầu một
 			access token ngắn hạn. Dữ liệu sự kiện cần đồng bộ được gửi trực tiếp từ trình duyệt của bạn
-			tới Google Calendar API. Token chỉ nằm trong bộ nhớ trong lúc thao tác và được yêu cầu thu hồi
-			sau khi hoàn tất.
+			tới Google Calendar API. Website chỉ giữ token ngắn hạn trong bộ nhớ của trang để tránh yêu
+			cầu đăng nhập lặp lại; không ghi token vào localStorage, cookie hay cơ sở dữ liệu. Token được
+			bỏ khi đóng hoặc tải lại trang và tự hết hạn theo Google. Bạn có thể thu hồi quyền tại tài
+			khoản Google. Extension có cơ chế giữ token ngắn hạn riêng để đồng bộ nền khi bạn chủ động bật
+			tính năng đó.
+		</p>
+	</section>
+
+	<section>
+		<h2>Xuất file và hình nền</h2>
+		<p>
+			File .ics và ảnh PNG được tạo trên trình duyệt, không tải lịch lên dịch vụ xử lý ảnh. File có
+			thể chứa tên môn, ngày giờ, nhóm và phòng; hãy kiểm tra trước khi chia sẻ hoặc dùng làm hình
+			nền hiển thị trên màn hình khóa.
 		</p>
 	</section>
 

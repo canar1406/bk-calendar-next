@@ -1,0 +1,6 @@
+Học kỳ 1 Năm học 2026 - 2027
+STT	Mã MH	Tên môn học	Nhóm - tổ	Ngày thi	Giờ thi	Số phút	Phòng thi	Cơ sở	Loại thi
+1	MT1003	Giải tích 1	L11	20/12/2026	07:30	90	H1-101	BK-CS2	Cuối kỳ
+2	PH1003	Vật lý 1	L12	22/12/2026	13:00 - 15:00		H3-301	BK-CS2	Cuối kỳ
+3	AS1001	Vẽ kỹ thuật	L13	24/12/2026	09:30	120	H6-411	BK-CS2	Cuối kỳ
+Trình bày từ dòng 1 đến 3 / 3 dòng

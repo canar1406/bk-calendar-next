@@ -1,5 +1,7 @@
 import {
 	diffSnapshots,
+	profileIdForSnapshot,
+	type ScheduleKind,
 	type SourceKind,
 	type TimetableDiff,
 	type TimetableSnapshot
@@ -12,6 +14,7 @@ export interface SyncProfile {
 	schemaVersion: 1;
 	profileId: string;
 	sourceKind: SourceKind;
+	scheduleKind?: ScheduleKind;
 	semester: number;
 	calendarName: string;
 	calendarId?: string;
@@ -102,7 +105,7 @@ export async function stageSnapshot(
 	store: ProfileStore,
 	snapshot: TimetableSnapshot
 ): Promise<StagedSnapshot> {
-	const profileId = `${snapshot.sourceKind}:${snapshot.semester}`;
+	const profileId = profileIdForSnapshot(snapshot);
 	const existing = await store.get(profileId);
 	const profile: SyncProfile = {
 		...(existing ?? {
@@ -110,11 +113,15 @@ export async function stageSnapshot(
 			profileId,
 			sourceKind: snapshot.sourceKind,
 			semester: snapshot.semester,
-			calendarName: `BKalendar • HK ${snapshot.semester}`
+			calendarName:
+				snapshot.scheduleKind === 'exams'
+					? `BKalendar • Lịch thi • HK ${snapshot.semester}`
+					: `BKalendar • HK ${snapshot.semester}`
 		}),
 		schemaVersion: 1,
 		profileId,
 		sourceKind: snapshot.sourceKind,
+		...(snapshot.scheduleKind ? { scheduleKind: snapshot.scheduleKind } : {}),
 		semester: snapshot.semester,
 		pendingSnapshot: snapshot,
 		lastCheckedAt: snapshot.capturedAt

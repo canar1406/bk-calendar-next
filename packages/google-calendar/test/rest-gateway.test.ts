@@ -90,7 +90,7 @@ describe('Google Calendar REST payload', () => {
 			icon: '🧮',
 			sourceFingerprint: 'source-fingerprint'
 		});
-		assert.equal(resource.summary, '🧮 Giải tích 1');
+		assert.equal(resource.summary, '🧮 [MT1003] Giải tích 1 (L11)');
 		assert.deepEqual(resource.start, {
 			dateTime: managedEvent.start,
 			timeZone: 'Asia/Ho_Chi_Minh'
@@ -106,6 +106,26 @@ describe('Google Calendar REST payload', () => {
 		assert.equal(resource.colorId, '5');
 		assert.ok(resource.recurrence?.some((line) => line.startsWith('RRULE:FREQ=WEEKLY;')));
 		assert.ok(resource.recurrence?.includes('EXDATE;TZID=Asia/Ho_Chi_Minh:20260831T070000'));
+	});
+
+	it('includes course code, group, and credits in the event summary when available', () => {
+		const resource = toGoogleEventResource({
+			...managedEvent,
+			courseCode: 'PH1003',
+			title: 'Vật lý 1',
+			group: 'L12',
+			metadata: { courseCode: 'PH1003', group: 'L12', credits: '4' }
+		});
+		assert.equal(resource.summary, '[PH1003] Vật lý 1 (L12 - 4 TC)');
+	});
+
+	it('omits empty recurrence arrays when creating single-occurrence exam or class events', () => {
+		const singleEventResource = toGoogleEventResource({
+			...managedEvent,
+			activeWeekIndexes: [0],
+			excludedStarts: []
+		});
+		assert.equal(singleEventResource.recurrence, undefined);
 	});
 
 	it('creates one dedicated managed calendar', async () => {

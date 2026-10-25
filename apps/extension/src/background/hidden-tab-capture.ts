@@ -7,7 +7,7 @@ export const HCMUT_CAS_RENEW_URL =
 	'https://sso.hcmut.edu.vn/cas/login?service=https%3A%2F%2Fmybk.hcmut.edu.vn%2Fapp%2Flogin%2Fcas&renew=true';
 
 const BLANK_TAB_URL = 'about:blank';
-const MAX_NAVIGATION_STEPS = 6;
+const MAX_NAVIGATION_STEPS = 12;
 
 export interface HiddenTabCreateProperties {
 	url: string;
@@ -321,7 +321,16 @@ function classifyMyBkRoute(
 		if (current.hostname !== 'mybk.hcmut.edu.vn') return 'unknown';
 		if (current.pathname.startsWith('/app/login/cas')) return 'app-home';
 		if (current.pathname.startsWith('/app/login')) return 'mybk-login';
-		if (current.pathname === '/app' || current.pathname === '/app/') return 'app-home';
+		if (
+			current.pathname === '/app' ||
+			current.pathname === '/app/' ||
+			current.pathname === '/app/he-thong-quan-ly' ||
+			current.pathname === '/app/he-thong-quan-ly/' ||
+			current.pathname === '/app/he-thong-quan-ly/sinh-vien' ||
+			current.pathname === '/app/he-thong-quan-ly/sinh-vien/'
+		) {
+			return 'app-home';
+		}
 		return 'unknown';
 	} catch {
 		return 'unknown';

@@ -1,4 +1,5 @@
-import type { SourceKind } from '../../../../packages/timetable/src/index.ts';
+import type { ScheduleKind, SourceKind } from '../../../../packages/timetable/src/index.ts';
+import { isExamTableHeader } from '../../../../packages/core/src/parser/exam.ts';
 
 export type CaptureCompleteness =
 	| { state: 'complete'; parsedRows: number; expectedRows: number }
@@ -8,6 +9,7 @@ export type CaptureCompleteness =
 export interface MyBkCapture {
 	raw: string;
 	sourceKind?: SourceKind;
+	scheduleKind?: ScheduleKind;
 	sourceUpdatedAt?: string;
 	completeness: CaptureCompleteness;
 }
@@ -47,6 +49,23 @@ export function extractTimetableFromDocument(
 		const rows = parseRows(table[1] ?? '');
 		if (rows.length < 2) continue;
 		const headers = rows[0]?.map(normalize) ?? [];
+		if (isExamTableHeader(headers.join('\t'))) {
+			const sourceKind = requestedSourceKind === 'auto' ? 'student-2024' : requestedSourceKind;
+			const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell.trim() !== ''));
+			const semester =
+				text.match(/Học kỳ\s+([123])\s+Năm học\s+(\d{4})\s*-\s*(\d{4})/iu)?.[0] ??
+				text.match(/(?:Học kỳ|HK)\s+(?:20)?\d{2}[123]\b/iu)?.[0];
+			if (!semester)
+				throw new Error(
+					'Không tìm thấy học kỳ của lịch thi. Hãy dán bảng trên web và nhập mã học kỳ.'
+				);
+			return {
+				sourceKind,
+				scheduleKind: 'exams',
+				raw: [semester, ...rows.map((row) => row.join('\t'))].join('\n'),
+				completeness: parseCompleteness(text, dataRows.length, sourceKind)
+			};
+		}
 		const sourceKind = detectSourceKind(headers);
 		if (!sourceKind || (requestedSourceKind !== 'auto' && sourceKind !== requestedSourceKind)) {
 			continue;

@@ -9,18 +9,24 @@
 		findManagedCalendars,
 		isGoogleCalendarAuthError,
 		requestGoogleAccessToken,
-		revokeGoogleAccessToken,
+		clearGoogleAccessToken,
 		type SyncResult
 	} from '../../../../packages/google-calendar/src/index.ts';
 	import {
 		createBrowserStorage,
 		createProfileStore
 	} from '../../../../packages/timetable/src/storage.ts';
-	import { diffSnapshots, type SourceKind } from '../../../../packages/timetable/src/index.ts';
+	import {
+		diffSnapshots,
+		type ScheduleKind,
+		type SourceKind
+	} from '../../../../packages/timetable/src/index.ts';
+	import { looksLikeExamSource } from '../../../../packages/core/src/index.ts';
 	import ChangeSummary from '$lib/components/ChangeSummary.svelte';
 	import CourseColorPicker from '$lib/components/CourseColorPicker.svelte';
 	import ScheduleBoard from '$lib/components/ScheduleBoard.svelte';
 	import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
+	import WallpaperExport from '$lib/components/WallpaperExport.svelte';
 	import {
 		publishCourseAppearanceToExtension,
 		publishProfileToExtension,
@@ -32,7 +38,11 @@
 	import type { ExtensionState } from '../../../../packages/timetable/src/index.ts';
 	import { loadGoogleIdentity } from '$lib/google-identity.ts';
 	import { syncPendingProfile, syncWithGoogleReauth } from '$lib/google-sync.ts';
-	import { createIcalendarExport, triggerIcalendarDownload } from '$lib/ical-download.ts';
+	import {
+		createIcalendarExport,
+		triggerIcalendarDownload,
+		shareIcalendarFile
+	} from '$lib/ical-download.ts';
 	import {
 		buildCourseColorAssignments,
 		colorizeEventsForSync,
@@ -58,16 +68,26 @@ HỌC KỲ\tMÃ MH\tTÊN MÔN HỌC\tTÍN CHỈ\tTC HỌC PHÍ\tNHÓM - TỔ\tTH
 20261\tDEMO1003\tThực hành minh họa\t1\t1\tDEMO-C\t6\t4 - 6\t9:00 - 11:50\tPHÒNG-DEMO-3\tBK-CS2\t35|36|37|
 Trình bày từ dòng 1 đến 3 / 3 dòng`;
 
+	const examSample = `Học kỳ 1 Năm học 2026 - 2027
+Mã MH\tTên môn học\tNhóm - tổ\tNgày thi\tGiờ thi\tSố phút\tPhòng thi\tLoại thi
+DEMO1001\tMôn minh họa 1\tDEMO-A\t20/12/2026\t07:30\t90\tPHÒNG-DEMO-1\tCuối kỳ
+DEMO1002\tMôn minh họa 2\tDEMO-B\t22/12/2026\t13:00\t120\tPHÒNG-DEMO-2\tCuối kỳ
+Trình bày từ dòng 1 đến 2 / 2 dòng`;
+
 	type Prepared = PreparedTimetable & {
 		profile?: Awaited<ReturnType<typeof stageTimetableImport>>['profile'];
 	};
 
 	let source = '';
 	let sourceKind: SourceKind = 'student-2024';
+	let scheduleKind: ScheduleKind | 'auto' = 'auto';
+	let semesterOverride = '';
+	let selectedWeekKey = '';
 	let result: Prepared | undefined;
 	let sourceIsSample = false;
 	let errorMessage = '';
 	let busy = false;
+	let clientReady = false;
 	let syncingGoogle = false;
 	let googleMessage = '';
 	let googleResult: SyncResult | undefined;
@@ -78,7 +98,9 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	let courseColorAssignments: Record<string, string> = {};
 	let courseAppearanceSummary: CourseAppearanceSummary[] = [];
 
-	const googleClientId = env.PUBLIC_GOOGLE_CLIENT_ID?.trim() ?? '';
+	const googleClientId =
+		env.PUBLIC_GOOGLE_CLIENT_ID?.trim() ||
+		'937100842777-d5d9ug5hi8ka60bnkkjv5e62ip7e2dre.apps.googleusercontent.com';
 	const sourceDescriptions: Record<SourceKind, string> = {
 		'student-2024': 'MyBK mới · mybk.hcmut.edu.vn/app',
 		'student-legacy': 'MyBK cũ · mybk.hcmut.edu.vn/stinfo',
@@ -88,6 +110,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	$: selectedSourceDescription = sourceDescriptions[sourceKind];
 
 	onMount(() => {
+		clientReady = true;
 		const targetWindow = window as unknown as ExtensionMessageWindow;
 		const unsubscribe = subscribeToExtensionState(targetWindow, (state) => {
 			extensionConnectionState = 'connected';
@@ -160,6 +183,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			profile: syncedProfile
 		};
 		sourceKind = snapshot.sourceKind;
+		scheduleKind = snapshot.scheduleKind ?? 'classes';
 		loadCourseAppearance(result, false);
 		if (state.status.state === 'error') {
 			extensionHandoffMessage = state.status.message;
@@ -178,6 +202,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 				const store = createProfileStore(createBrowserStorage(window.localStorage));
 				result = await stageTransferredSnapshot(store, response.snapshot);
 				sourceKind = response.snapshot.sourceKind;
+				scheduleKind = response.snapshot.scheduleKind ?? 'classes';
 				loadCourseAppearance(result, false);
 				extensionHandoffMessage =
 					'Đã nhận thời khóa biểu từ extension. Hãy xem lại thay đổi trước khi chọn nơi đồng bộ.';
@@ -205,26 +230,43 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	async function importTimetable(): Promise<void> {
 		errorMessage = '';
 		if (source.trim() === '') {
-			errorMessage = 'Hãy dán bảng thời khóa biểu từ nguồn đã chọn trước khi tiếp tục.';
+			errorMessage =
+				'Hãy dán bảng thời khóa biểu hoặc lịch thi từ nguồn đã chọn trước khi tiếp tục.';
 			return;
 		}
 
 		busy = true;
 		try {
+			const detectedKind =
+				scheduleKind === 'auto'
+					? looksLikeExamSource(source)
+						? 'exams'
+						: 'classes'
+					: scheduleKind;
+			const semesterText = semesterOverride.trim();
+			if (detectedKind === 'exams' && semesterText && !/^(?:20)?\d{2}[123]$/u.test(semesterText)) {
+				throw new Error('Mã học kỳ không hợp lệ. Ví dụ: 261 hoặc 20261.');
+			}
+			const options = {
+				capturedAt: new Date().toISOString(),
+				completeness: inferCaptureCompleteness(source, sourceKind, detectedKind),
+				sourceKind,
+				scheduleKind: detectedKind,
+				...(detectedKind === 'exams' && semesterText ? { semester: Number(semesterText) } : {})
+			};
+			googleMessage = '';
+			googleResult = undefined;
+			calendarExportMessage = '';
 			if (sourceIsSample) {
 				result = await prepareTimetable(source, undefined, {
-					capturedAt: new Date().toISOString(),
-					completeness: inferCaptureCompleteness(source, sourceKind),
-					sourceKind,
+					...options,
 					provenance: 'sample'
 				});
 				loadCourseAppearance(result, false);
 			} else {
 				const store = createProfileStore(createBrowserStorage(window.localStorage));
 				result = await stageTimetableImport(store, source, {
-					capturedAt: new Date().toISOString(),
-					completeness: inferCaptureCompleteness(source, sourceKind),
-					sourceKind,
+					...options,
 					provenance: 'user'
 				});
 				loadCourseAppearance(result, true);
@@ -247,7 +289,8 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 
 	function useSample(): void {
 		sourceKind = 'student-2024';
-		source = sample;
+		source = scheduleKind === 'exams' ? examSample : sample;
+		semesterOverride = '';
 		sourceIsSample = true;
 		result = undefined;
 		courseColorPreferences = defaultCourseColorPreferences();
@@ -257,7 +300,6 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 
 	function changeSourceKind(): void {
 		result = undefined;
-		sourceIsSample = false;
 		errorMessage = '';
 		courseColorPreferences = defaultCourseColorPreferences();
 		courseColorAssignments = {};
@@ -303,18 +345,20 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		}
 	}
 
-	async function downloadIcalendar(): Promise<void> {
+	async function downloadIcalendar(share = false): Promise<void> {
 		if (!result || result.snapshot.provenance === 'sample') return;
 		calendarExportMessage = '';
-		const calendarName = `BKalendar • HK ${result.snapshot.semester}`;
-		const events = colorizeEventsForSync(
-			result.snapshot.events,
-			courseColorAssignments,
-			courseColorPreferences.icons
-		);
-		const file = createIcalendarExport({ ...result.snapshot, events }, calendarName);
 		try {
-			const action = await triggerIcalendarDownload(file);
+			const calendarName =
+				result.profile?.calendarName ??
+				`BKalendar • ${result.snapshot.scheduleKind === 'exams' ? 'Lịch thi • ' : ''}HK ${result.snapshot.semester}`;
+			const events = colorizeEventsForSync(
+				result.snapshot.events,
+				courseColorAssignments,
+				courseColorPreferences.icons
+			);
+			const file = createIcalendarExport({ ...result.snapshot, events }, calendarName);
+			const action = await (share ? shareIcalendarFile(file) : triggerIcalendarDownload(file));
 			calendarExportMessage =
 				action === 'shared' ? 'Đã mở bảng chia sẻ file lịch.' : 'Đã tạo file .ics để tải xuống.';
 		} catch (error) {
@@ -334,18 +378,20 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		}
 
 		syncingGoogle = true;
-		const issuedTokens = new Set<string>();
+		const snapshotForSync = result.snapshot;
+		const profileId = result.profileId;
+		const colorsForSync = { ...courseColorAssignments };
+		const iconsForSync = { ...courseColorPreferences.icons };
 		try {
 			const identity = await loadGoogleIdentity();
 			const store = createProfileStore(createBrowserStorage(window.localStorage));
+			await stageTransferredSnapshot(store, snapshotForSync);
 			const synced = await syncWithGoogleReauth({
 				async requestToken() {
-					const token = await requestGoogleAccessToken(identity, googleClientId);
-					issuedTokens.add(token);
-					return token;
+					return await requestGoogleAccessToken(identity, googleClientId);
 				},
 				async run(accessToken) {
-					const attempt = await syncPendingProfile(store, result!.profileId, {
+					const attempt = await syncPendingProfile(store, profileId, {
 						gateway: new GoogleCalendarRestGateway(accessToken),
 						findCalendars: async (summary) =>
 							await findManagedCalendars(fetch, accessToken, summary),
@@ -353,8 +399,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 							await findLegacyCalendars(fetch, accessToken, sourceKind, semester),
 						createCalendar: async (summary) =>
 							await createManagedCalendar(fetch, accessToken, summary),
-						prepareEvents: (events) =>
-							colorizeEventsForSync(events, courseColorAssignments, courseColorPreferences.icons),
+						prepareEvents: (events) => colorizeEventsForSync(events, colorsForSync, iconsForSync),
 						onProgress(progress) {
 							googleResult = { ...progress, failed: [...progress.failed] };
 						}
@@ -368,45 +413,35 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 				onReauth() {
 					googleMessage = 'Phiên Google đã hết hạn. BKalendar đang yêu cầu đăng nhập Google lại…';
 				},
-				async beforeRetry() {
-					const oldToken = [...issuedTokens].at(-1);
-					if (!oldToken) return;
-					try {
-						await revokeGoogleAccessToken(oldToken);
-					} catch {
-						// Revocation is best-effort; requesting a fresh interactive token is mandatory.
-					}
+				beforeRetry() {
+					clearGoogleAccessToken(identity, googleClientId);
 				}
 			});
 			googleResult = synced.result;
-			result = { ...result, profile: synced.profile };
+			if (result?.snapshot === snapshotForSync) {
+				result = { ...result, profile: synced.profile };
+			}
 			publishProfileToExtension({
 				targetWindow: window as unknown as ExtensionMessageWindow,
 				profile: synced.profile
 			});
+			const firstFailedReason = synced.result.failed[0]?.message;
 			googleMessage =
 				synced.result.failed.length > 0
-					? `Có ${synced.result.failed.length} thao tác chưa thành công. Snapshot vẫn đang chờ để thử lại.`
+					? `Có ${synced.result.failed.length} thao tác chưa thành công. Snapshot vẫn đang chờ để thử lại.${firstFailedReason ? ` (${firstFailedReason})` : ''}`
 					: synced.promoted
-						? 'Đã đồng bộ và lưu bản thời khóa biểu này làm mốc so sánh.'
+						? 'Đã đồng bộ và lưu bản lịch này làm mốc so sánh.'
 						: 'Đã cập nhật các mục an toàn. Phần có thể đã xóa vẫn bị chặn vì dữ liệu chưa đầy đủ.';
 		} catch (error) {
 			googleMessage = error instanceof Error ? error.message : 'Không thể đồng bộ Google Calendar.';
 		} finally {
-			for (const accessToken of issuedTokens) {
-				try {
-					await revokeGoogleAccessToken(accessToken);
-				} catch {
-					// The short-lived token remains memory-only and will expire even if revocation fails.
-				}
-			}
 			syncingGoogle = false;
 		}
 	}
 </script>
 
 <svelte:head>
-	<title>BKalendar Next · Lịch học HCMUT dễ kiểm tra</title>
+	<title>BKalendar Next · Lịch học và lịch thi HCMUT</title>
 </svelte:head>
 
 <header class="site-header">
@@ -423,10 +458,10 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 <main>
 	<section class="intro">
 		<div>
-			<h1>Biến thời khóa biểu MyBK thành lịch bạn có thể tin tưởng.</h1>
+			<h1>Lịch học, lịch thi. Gọn trên mọi màn hình.</h1>
 			<p>
-				Dán dữ liệu, xem lại từng buổi học và kiểm tra thay đổi trước khi xuất lịch. BKalendar không
-				lưu mật khẩu, cookie hay token Google.
+				Dán dữ liệu MyBK, xem lại thay đổi rồi đồng bộ Google, tải .ics hoặc tạo hình nền PNG.
+				Website không lưu mật khẩu, cookie hay token Google vào bộ nhớ lâu dài.
 			</p>
 		</div>
 		<ol class="steps" aria-label="Quy trình">
@@ -530,14 +565,41 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 		<div class="section-heading">
 			<div>
 				<p class="section-number">01</p>
-				<h2 id="import-title">Dán thời khóa biểu</h2>
+				<h2 id="import-title">Dán lịch học hoặc lịch thi</h2>
 			</div>
-			<button class="text-button" type="button" on:click={useSample}>Dùng dữ liệu mẫu</button>
+			<button class="text-button" type="button" disabled={!clientReady} on:click={useSample}
+				>Dùng dữ liệu mẫu</button
+			>
 		</div>
 
 		<form on:submit|preventDefault={importTimetable}>
+			<div class="import-options">
+				<label class="source-kind-field" for="schedule-kind">
+					<span>Nội dung lịch</span>
+					<select id="schedule-kind" bind:value={scheduleKind} on:change={changeSourceKind}>
+						<option value="auto">Tự nhận diện lịch học / lịch thi</option>
+						<option value="classes">Thời khóa biểu môn học</option>
+						<option value="exams">Lịch thi</option>
+					</select>
+					<small>Lịch thi có ngày cụ thể, không lặp lại hằng tuần.</small>
+				</label>
+				{#if scheduleKind !== 'classes'}
+					<label class="source-kind-field" for="exam-semester">
+						<span>Học kỳ của lịch thi (nếu bảng thiếu tiêu đề)</span>
+						<input
+							id="exam-semester"
+							type="text"
+							inputmode="numeric"
+							maxlength="5"
+							bind:value={semesterOverride}
+							placeholder="Ví dụ: 261 · Bỏ trống để tự đọc"
+						/>
+						<small>Không cần nhập nếu đã sao chép tiêu đề học kỳ.</small>
+					</label>
+				{/if}
+			</div>
 			<label class="source-kind-field" for="schedule-source">
-				<span>Loại lịch</span>
+				<span>Nguồn dữ liệu</span>
 				<select id="schedule-source" bind:value={sourceKind} on:change={changeSourceKind}>
 					<option value="student-2024">Sinh viên (mybk.hcmut.edu.vn/app)</option>
 					<option value="student-legacy">Sinh viên (mybk.hcmut.edu.vn/stinfo)</option>
@@ -546,10 +608,17 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 				</select>
 				<small>Chọn đúng nguồn để BKalendar dùng parser và cấu trúc tuần học tương ứng.</small>
 			</label>
-			<label for="timetable-source">Nội dung sao chép từ bảng thời khóa biểu</label>
+			<label for="timetable-source">Nội dung sao chép từ bảng lịch (kèm tiêu đề cột)</label>
 			<p class="source-kind-current">{selectedSourceDescription}</p>
+			{#if scheduleKind !== 'classes'}
+				<p class="import-help">
+					Lịch thi: tên môn · ngày thi · giờ thi · số phút hoặc giờ kết thúc · phòng. Chấp nhận ngày
+					DD/MM/YYYY hoặc YYYY-MM-DD; giữ các cột phân cách bằng tab khi sao chép.
+				</p>
+			{/if}
 			<textarea
 				id="timetable-source"
+				disabled={!clientReady}
 				bind:value={source}
 				on:input={() => (sourceIsSample = false)}
 				rows="10"
@@ -557,8 +626,8 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 				spellcheck="false"></textarea>
 			<div class="form-footer">
 				<p>Không dán tên đăng nhập, mật khẩu, cookie hoặc token.</p>
-				<button class="primary-button" type="submit" disabled={busy}>
-					{busy ? 'Đang đọc lịch…' : 'Đọc thời khóa biểu'}
+				<button class="primary-button" type="submit" disabled={busy || !clientReady}>
+					{busy ? 'Đang đọc lịch…' : 'Đọc lịch'}
 				</button>
 			</div>
 		</form>
@@ -574,7 +643,11 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 	{#if result}
 		<section class="snapshot-summary" aria-label="Tóm tắt thời khóa biểu">
 			<div><span>Học kỳ</span><strong>{result.snapshot.semester}</strong></div>
-			<div><span>Buổi học</span><strong>{result.snapshot.events.length}</strong></div>
+			<div>
+				<span>{result.snapshot.scheduleKind === 'exams' ? 'Ca thi' : 'Buổi học'}</span><strong
+					>{result.snapshot.events.length}</strong
+				>
+			</div>
 			<div>
 				<span>Cập nhật nguồn</span>
 				<strong>{result.snapshot.sourceUpdatedAt?.slice(0, 10) ?? 'Không rõ'}</strong>
@@ -582,10 +655,20 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			<div><span>Profile</span><strong>{result.profileId}</strong></div>
 		</section>
 
+		{#if result.snapshot.warnings.length > 0}
+			<div class="import-warnings" role="status">
+				<strong>Cần kiểm tra dữ liệu</strong>
+				<ul>
+					{#each result.snapshot.warnings as warning}<li>{warning}</li>{/each}
+				</ul>
+			</div>
+		{/if}
 		<ScheduleBoard
 			events={result.snapshot.events}
 			colorAssignments={courseColorAssignments}
 			courseIcons={courseColorPreferences.icons}
+			scheduleKind={result.snapshot.scheduleKind ?? 'classes'}
+			bind:selectedWeekKey
 		/>
 		<CourseColorPicker
 			events={result.snapshot.events}
@@ -593,6 +676,13 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			onChange={updateCourseAppearance}
 		/>
 		<ChangeSummary diff={result.diff} />
+
+		<WallpaperExport
+			snapshot={result.snapshot}
+			weekKey={selectedWeekKey}
+			colorAssignments={courseColorAssignments}
+			courseIcons={courseColorPreferences.icons}
+		/>
 
 		<section class="destination" aria-labelledby="destination-title">
 			<div class="section-heading">
@@ -603,8 +693,11 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 			</div>
 			<div class="destination-options">
 				<div>
-					<h3>Google Calendar</h3>
-					<p>Đồng bộ có xác nhận và cập nhật đúng các sự kiện do BKalendar quản lý.</p>
+					<h3>Google Calendar (@hcmut.edu.vn)</h3>
+					<p>
+						Đồng bộ bằng tài khoản Google Bách Khoa (<code>@hcmut.edu.vn</code>) và cập nhật đúng
+						các sự kiện do BKalendar quản lý.
+					</p>
 					<button
 						class="google-button"
 						type="button"
@@ -625,21 +718,56 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 						</p>
 					{/if}
 					<p class="sync-message" aria-live="polite">{googleMessage}</p>
+					<details class="import-instructions">
+						<summary>Google báo giới hạn đăng nhập?</summary>
+						<p>
+							Giới hạn người dùng OAuth khác với quota đồng bộ. Nếu gặp “Sign-in limit” hoặc “Access
+							blocked”, mình phải kiểm tra Audience / Test users và Verification Center trong Google
+							Cloud. Đăng nhập lại liên tục không gỡ được giới hạn này.
+						</p>
+						<p>
+							Với lỗi quota tạm thời (429 / rateLimitExceeded), BKalendar thử lại có giới hạn; hãy
+							đợi vài phút nếu vẫn bị chặn. Bạn vẫn có thể tải .ics hoặc PNG mà không đăng nhập.
+						</p>
+					</details>
 				</div>
 				<div>
-					<h3>Apple Calendar và ứng dụng khác</h3>
-					<p>Tải file một lần; thay đổi sau này không tự cập nhật.</p>
+					<h3>Apple Calendar / Google Calendar (.ics)</h3>
+					<p>File chứa từng buổi theo ngày giờ cụ thể. Nhập một lần, không tự cập nhật.</p>
 					<button
 						class="secondary-button"
 						type="button"
 						disabled={result.snapshot.provenance === 'sample'}
-						on:click={downloadIcalendar}
+						on:click={() => downloadIcalendar()}
 					>
 						{result.snapshot.provenance === 'sample'
 							? 'Không thể xuất dữ liệu mẫu'
 							: 'Tải file .ics'}
 					</button>
+					<button
+						class="text-button"
+						type="button"
+						disabled={result.snapshot.provenance === 'sample'}
+						on:click={() => downloadIcalendar(true)}
+					>
+						Chia sẻ file lịch
+					</button>
 					<p class="sync-message" aria-live="polite">{calendarExportMessage}</p>
+					<details class="import-instructions">
+						<summary>Cách nhập file .ics</summary>
+						<p>
+							Mac: mở Calendar → File → Import, chọn file và lịch đích. Google Calendar trên máy
+							tính: Cài đặt → Nhập và xuất → Nhập, chọn file .ics.
+						</p>
+						<p>
+							Trên iPhone, nút Chia sẻ chỉ mở bảng chia sẻ hệ thống nếu trình duyệt hỗ trợ; không
+							đảm bảo có đích Calendar. Nếu Files / Safari không có nút thêm lịch, hãy nhập trên Mac
+							cùng iCloud hoặc Google Calendar web rồi đồng bộ điện thoại.
+						</p>
+						<p>
+							Không nhập cùng file nhiều lần để tránh bản sao. Đối chiếu múi giờ Việt Nam (UTC+07).
+						</p>
+					</details>
 				</div>
 			</div>
 		</section>

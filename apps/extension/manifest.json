@@ -12,6 +12,8 @@
 		"https://tkb.hcmut.edu.vn/*",
 		"https://grad.hcmut.edu.vn/*",
 		"https://canar1406.github.io/bk-calendar-next/*",
+		"http://localhost/bk-calendar-next/*",
+		"http://127.0.0.1/bk-calendar-next/*",
 		"https://www.googleapis.com/calendar/v3/*"
 	],
 	"icons": {
@@ -51,13 +53,17 @@
 			"all_frames": true
 		},
 		{
-			"matches": ["https://canar1406.github.io/bk-calendar-next/*"],
+			"matches": [
+				"https://canar1406.github.io/bk-calendar-next/*",
+				"http://localhost/bk-calendar-next/*",
+				"http://127.0.0.1/bk-calendar-next/*"
+			],
 			"js": ["web-review.js"]
 		}
 	],
 	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxNVf99RW61WXWYL9uINMZqIWpF9XwRaXK3xeOUZll3guaJsirUSOPScchJZXNbb5iT8eA0N9m8Tb+UwHDfsOmGPwlL50GylXQep4PB2TW9tk2eB0/rl3h/1w+z0vZMX0vzuTr/C8EsKHXeUFSajfLkuB28sbvNxjV720zEvyu8T3P1NF3k33LaTvU3R4W7andFEwGm6Y5yVLXAGSl/BnjfeERSwi7Lj1rw8VaH7y4dNiqeRfrLGxSUJ75khNGFOPJBne65vaMDwyuqf8yAkX7/BraHMJ0A/T/IdFN+Z37zPSurpNOqtLyTX8j+pC6TIiVY37lXx2rdk0Px80c12yoQIDAQAB",
 	"oauth2": {
-		"client_id": "290456536857-cks7o9s2qkp6jma17h905h6lknlus4p9.apps.googleusercontent.com",
+		"client_id": "937100842777-d5d9ug5hi8ka60bnkkjv5e62ip7e2dre.apps.googleusercontent.com",
 		"scopes": [
 			"https://www.googleapis.com/auth/calendar.events",
 			"https://www.googleapis.com/auth/calendar.calendarlist.readonly",

@@ -18,6 +18,26 @@ import {
 } from '../src/index.ts';
 
 describe('extension-to-web transfer protocol', () => {
+	it('preserves an exam snapshot and rejects an invalid schedule kind', async () => {
+		const snapshot = await createSnapshot({
+			sourceKind: 'student-2024',
+			scheduleKind: 'exams',
+			semester: 261,
+			capturedAt: '2026-10-25T00:00:00.000Z',
+			warnings: [],
+			events: []
+		});
+		const response = createExtensionTransferResponse('exams', snapshot);
+		assert.equal(isExtensionTransferResponse(response), true);
+		assert.equal(
+			isExtensionTransferResponse({
+				...response,
+				snapshot: { ...snapshot, scheduleKind: 'other' }
+			}),
+			false
+		);
+	});
+
 	it('round-trips a versioned nonce without putting timetable data in the request', () => {
 		const request = createExtensionTransferRequest('request-123');
 

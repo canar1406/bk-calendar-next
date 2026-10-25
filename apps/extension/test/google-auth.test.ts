@@ -10,13 +10,13 @@ import {
 	type ExtensionIdentityApi
 } from '../src/background/google-auth.ts';
 
-const webClientId = '290456536857-ujdg26n2gqovjc27h2mqrd9p6vhm7pbp.apps.googleusercontent.com';
+const webClientId = '937100842777-d5d9ug5hi8ka60bnkkjv5e62ip7e2dre.apps.googleusercontent.com';
 
 describe('cross-browser extension Google OAuth', () => {
 	it('uses the Web OAuth client for the Edge launchWebAuthFlow fallback', () => {
 		assert.equal(
 			GOOGLE_WEB_CLIENT_ID,
-			'290456536857-ujdg26n2gqovjc27h2mqrd9p6vhm7pbp.apps.googleusercontent.com'
+			'937100842777-d5d9ug5hi8ka60bnkkjv5e62ip7e2dre.apps.googleusercontent.com'
 		);
 	});
 
@@ -60,7 +60,8 @@ describe('cross-browser extension Google OAuth', () => {
 		assert.equal(authUrl.searchParams.get('client_id'), webClientId);
 		assert.equal(authUrl.searchParams.get('redirect_uri'), 'https://extension.chromiumapp.org/');
 		assert.equal(authUrl.searchParams.get('response_type'), 'token');
-		assert.equal(authUrl.searchParams.get('prompt'), 'select_account consent');
+		assert.equal(authUrl.searchParams.get('prompt'), 'select_account');
+		assert.equal(authUrl.searchParams.get('hd'), 'hcmut.edu.vn');
 	});
 
 	it('caches an Edge web-flow token for the silent follow-up check', async () => {

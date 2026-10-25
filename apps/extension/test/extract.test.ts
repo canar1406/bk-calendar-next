@@ -5,7 +5,7 @@ import {
 	extractTimetableFromDocument,
 	isLikelyExpiredSession
 } from '../src/content/extract.ts';
-import { parseTimetableSource } from '../../../packages/core/src/index.ts';
+import { createSourceSnapshot, parseTimetableSource } from '../../../packages/core/src/index.ts';
 
 const html = `
 <h3>20261 - Học kỳ 1 Năm học 2026 - 2027(Hiện hành)</h3>
@@ -20,6 +20,26 @@ const html = `
 <div>Trình bày từ dòng 1 đến 2 / 11 dòng</div>`;
 
 describe('MyBK DOM extractor', () => {
+	it('recognizes an exam table without depending on an invented portal route', async () => {
+		const capture = extractTimetableFromDocument(
+			`
+			<h3>Học kỳ 1 Năm học 2026 - 2027</h3>
+			<table><tr><th>Mã MH</th><th>Tên môn học</th><th>Ngày thi</th><th>Giờ thi</th><th>Số phút</th><th>Phòng thi</th></tr>
+			<tr><td>MT1003</td><td>Giải tích 1</td><td>20/12/2026</td><td>07:30</td><td>90</td><td>H1</td></tr></table>
+			<p>Trình bày từ dòng 1 đến 1 / 3 dòng</p>
+		`,
+			'student-2024'
+		);
+		assert.equal(capture.scheduleKind, 'exams');
+		assert.equal(capture.completeness.state, 'incomplete');
+		const snapshot = await createSourceSnapshot(capture.raw, capture.sourceKind, {
+			scheduleKind: capture.scheduleKind,
+			completeness: capture.completeness
+		});
+		assert.equal(snapshot.events.length, 1);
+		assert.equal(snapshot.scheduleKind, 'exams');
+	});
+
 	it('maps table cells into the tab-delimited format understood by core', () => {
 		const result = extractMyBkTableFromDocument(html);
 		assert.match(result.raw, /HỌC KỲ\tMÃ MH\tTÊN MÔN HỌC/);

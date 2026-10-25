@@ -56,7 +56,7 @@ jobs:
 
       - name: Build static SvelteKit site
         env:
-          PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.PUBLIC_GOOGLE_CLIENT_ID }}
+          PUBLIC_GOOGLE_CLIENT_ID: 937100842777-d5d9ug5hi8ka60bnkkjv5e62ip7e2dre.apps.googleusercontent.com
         run: pnpm --filter @bkalendar-next/web build
 
       - name: Upload GitHub Pages artifact

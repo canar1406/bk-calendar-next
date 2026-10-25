@@ -1,9 +1,11 @@
 export type SourceKind = 'student-2024' | 'student-legacy' | 'lecturer' | 'postgraduate';
+export type ScheduleKind = 'classes' | 'exams';
 
 export interface ManagedEvent {
 	stableKey: string;
 	fingerprint?: string;
 	sourceKind: SourceKind;
+	scheduleKind?: ScheduleKind;
 	semester: number;
 	courseCode: string;
 	group: string;
@@ -30,6 +32,7 @@ export type CaptureCompleteness =
 export interface TimetableSnapshot {
 	schemaVersion: 1;
 	sourceKind: SourceKind;
+	scheduleKind?: ScheduleKind;
 	semester: number;
 	capturedAt: string;
 	provenance?: 'user' | 'sample';
@@ -80,9 +83,17 @@ export async function createStableEventKey(
 		courseCode: normalizeIdentity(event.courseCode || event.title),
 		group: normalizeIdentity(event.group),
 		sessionOrdinal: event.sessionOrdinal,
-		weekday: event.weekday
+		...(event.scheduleKind === 'exams'
+			? { scheduleKind: 'exams', examType: normalizeIdentity(event.metadata.examType ?? '') }
+			: { weekday: event.weekday })
 	};
 	return `bk2_${await sha256(canonicalStringify(identity))}`;
+}
+
+export function profileIdForSnapshot(
+	snapshot: Pick<TimetableSnapshot, 'sourceKind' | 'semester' | 'scheduleKind'>
+): string {
+	return `${snapshot.sourceKind}:${snapshot.semester}${snapshot.scheduleKind === 'exams' ? ':exams' : ''}`;
 }
 
 export async function createEventFingerprint(

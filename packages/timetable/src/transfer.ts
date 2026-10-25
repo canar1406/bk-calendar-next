@@ -285,7 +285,8 @@ function isSyncProfile(value: unknown): value is SyncProfile {
 	return (
 		value.schemaVersion === 1 &&
 		typeof value.profileId === 'string' &&
-		typeof value.sourceKind === 'string' &&
+		isSourceKind(value.sourceKind) &&
+		isScheduleKind(value.scheduleKind) &&
 		typeof value.semester === 'number' &&
 		typeof value.calendarName === 'string' &&
 		(value.calendarId === undefined || typeof value.calendarId === 'string') &&
@@ -325,6 +326,7 @@ function isTimetableSnapshot(value: unknown): value is TimetableSnapshot {
 	return (
 		value.schemaVersion === 1 &&
 		isSourceKind(value.sourceKind) &&
+		isScheduleKind(value.scheduleKind) &&
 		Number.isInteger(value.semester) &&
 		typeof value.capturedAt === 'string' &&
 		(value.provenance === undefined ||
@@ -343,6 +345,7 @@ function isManagedEvent(value: unknown): value is ManagedEvent {
 	return (
 		typeof value.stableKey === 'string' &&
 		isSourceKind(value.sourceKind) &&
+		isScheduleKind(value.scheduleKind) &&
 		Number.isInteger(value.semester) &&
 		typeof value.courseCode === 'string' &&
 		typeof value.group === 'string' &&
@@ -359,6 +362,10 @@ function isManagedEvent(value: unknown): value is ManagedEvent {
 		value.excludedStarts.every((start) => typeof start === 'string') &&
 		isRecord(value.metadata)
 	);
+}
+
+function isScheduleKind(value: unknown): boolean {
+	return value === undefined || value === 'classes' || value === 'exams';
 }
 
 function isSourceKind(value: unknown): boolean {

@@ -40,10 +40,14 @@ export function createIcalendarExport(
 	if (snapshot.provenance === 'sample') {
 		throw new Error('Dữ liệu mẫu chỉ dùng để xem trước và không thể xuất lịch.');
 	}
+	if (snapshot.events.length === 0) {
+		throw new Error('Chưa có sự kiện hợp lệ để xuất. Hãy nhập lịch học hoặc lịch thi trước.');
+	}
 	return {
 		content: formatIcalendar(snapshot, {
 			calendarName,
-			generatedAt: options.generatedAt ?? new Date()
+			generatedAt: options.generatedAt ?? new Date(),
+			recurrenceMode: 'expanded'
 		}),
 		filename: `${sanitizeFilename(calendarName)}.ics`,
 		mimeType: MIME_TYPE
@@ -68,6 +72,12 @@ export async function exportIcalendarFile(
 }
 
 export function triggerIcalendarDownload(file: IcalendarExport): Promise<'shared' | 'downloaded'> {
+	return exportIcalendarFile(file, {
+		downloadEnvironment: createBrowserDownloadEnvironment()
+	});
+}
+
+export function shareIcalendarFile(file: IcalendarExport): Promise<'shared' | 'downloaded'> {
 	return exportIcalendarFile(file);
 }
 

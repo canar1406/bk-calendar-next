@@ -1,4 +1,5 @@
 import { createPresentationFingerprint, type ManagedEvent } from '../../timetable/src/index.ts';
+import { formatGoogleEventSummary } from './rest.ts';
 
 export interface ManagedGoogleEvent {
 	id: string;
@@ -82,7 +83,10 @@ export async function syncManagedPresentation(
 			result.missing++;
 			continue;
 		}
-		if (remote.fingerprint === event.fingerprint) {
+		if (
+			remote.fingerprint === event.fingerprint &&
+			(!remote.summary || remote.summary === formatGoogleEventSummary(event))
+		) {
 			result.unchanged++;
 			continue;
 		}
@@ -151,7 +155,10 @@ export async function syncManagedCalendar(
 	for (const event of existing) {
 		const remote = remoteByKey.get(event.stableKey)!;
 		const eventForSync = inheritRemotePresentation(event, remote);
-		if (remote.fingerprint === eventForSync.fingerprint) {
+		if (
+			remote.fingerprint === eventForSync.fingerprint &&
+			(!remote.summary || remote.summary === formatGoogleEventSummary(eventForSync))
+		) {
 			result.unchanged++;
 			options.onProgress?.(result);
 			continue;
@@ -246,12 +253,14 @@ function byRemoteIdentity(a: ManagedGoogleEvent, b: ManagedGoogleEvent): number 
 
 export {
 	CALENDAR_SCOPE,
+	clearGoogleAccessToken,
 	requestGoogleAccessToken,
 	revokeGoogleAccessToken,
 	type GoogleIdentityApi,
 	type GoogleTokenClient,
 	type GoogleTokenResponse
 } from './oauth.ts';
+export { GoogleOAuthError } from './auth-errors.ts';
 export {
 	COURSE_APPEARANCE_TRANSFER_TYPE,
 	COURSE_APPEARANCE_TRANSFER_VERSION,
@@ -287,6 +296,7 @@ export {
 	createManagedCalendar,
 	findLegacyCalendars,
 	findManagedCalendars,
+	formatGoogleEventSummary,
 	isGoogleCalendarAuthError,
 	toGoogleEventResource,
 	type GoogleCalendarResource,

@@ -22,6 +22,7 @@ interface CalendarSnapshot {
 export interface IcalendarFormatOptions {
 	readonly calendarName: string;
 	readonly generatedAt: Date;
+	readonly recurrenceMode?: 'series' | 'expanded';
 }
 
 /** Format a timetable snapshot as an RFC 5545 iCalendar document. */
@@ -29,20 +30,63 @@ export function formatIcalendar(
 	snapshot: CalendarSnapshot,
 	options: IcalendarFormatOptions
 ): string {
+	for (const event of snapshot.events) validateEvent(event);
+	const expanded = options.recurrenceMode === 'expanded';
 	const lines = [
 		'BEGIN:VCALENDAR',
 		'PRODID:-//BKalendar//Timetable//EN',
 		'VERSION:2.0',
 		'CALSCALE:GREGORIAN',
-		'METHOD:PUBLISH',
 		`X-WR-CALNAME:${escapeText(options.calendarName)}`,
 		`X-WR-TIMEZONE:${CALENDAR_TIME_ZONE}`,
-		...timeZoneLines(),
-		...snapshot.events.flatMap((event) => eventLines(event, options.generatedAt)),
+		...(expanded ? [] : timeZoneLines()),
+		...snapshot.events.flatMap((event) =>
+			expanded
+				? expandedEventLines(event, options.generatedAt)
+				: eventLines(event, options.generatedAt)
+		),
 		'END:VCALENDAR'
 	];
 
 	return `${lines.flatMap(foldLine).join('\r\n')}\r\n`;
+}
+
+function validateEvent(event: CalendarEvent): void {
+	const start = parseDate(event.start).getTime();
+	const end = parseDate(event.end).getTime();
+	if (end <= start) throw new RangeError('Giờ kết thúc sự kiện phải sau giờ bắt đầu.');
+	if (
+		event.activeWeekIndexes.length === 0 ||
+		event.activeWeekIndexes.some((week) => !Number.isSafeInteger(week) || week < 0 || week > 104)
+	) {
+		throw new RangeError('Tuần học không hợp lệ để xuất file lịch.');
+	}
+}
+
+function expandedEventLines(event: CalendarEvent, generatedAt: Date): string[] {
+	const start = parseDate(event.start).getTime();
+	const duration = parseDate(event.end).getTime() - start;
+	const excluded = new Set(event.excludedStarts.map((value) => parseDate(value).getTime()));
+	return [...new Set(event.activeWeekIndexes)]
+		.sort((left, right) => left - right)
+		.flatMap((week) => {
+			const occurrenceStart = new Date(start + week * WEEK_IN_MILLISECONDS);
+			if (excluded.has(occurrenceStart.getTime())) return [];
+			const lines = [
+				'BEGIN:VEVENT',
+				`UID:${escapeText(`${event.stableKey}-${formatUtcDateTime(occurrenceStart)}@bkalendar-next`)}`,
+				`DTSTAMP:${formatUtcDateTime(generatedAt)}`,
+				`DTSTART:${formatUtcDateTime(occurrenceStart)}`,
+				`DTEND:${formatUtcDateTime(new Date(occurrenceStart.getTime() + duration))}`,
+				`SUMMARY:${escapeText(event.icon ? `${event.icon} ${event.title}` : event.title)}`,
+				`LOCATION:${escapeText(event.location)}`,
+				'STATUS:CONFIRMED',
+				'TRANSP:OPAQUE'
+			];
+			const description = formatMetadata(event.metadata);
+			if (description) lines.push(`DESCRIPTION:${escapeText(description)}`);
+			return [...lines, 'END:VEVENT'];
+		});
 }
 
 function eventLines(event: CalendarEvent, generatedAt: Date): string[] {
@@ -121,6 +165,7 @@ function formatMetadata(metadata: Readonly<Record<string, unknown>>): string {
 
 function escapeText(value: string): string {
 	return value
+		.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, '')
 		.replace(/\\/g, '\\\\')
 		.replace(/\r\n|\r|\n/g, '\\n')
 		.replace(/;/g, '\\;')

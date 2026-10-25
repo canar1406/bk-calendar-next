@@ -3,6 +3,8 @@ import { createDebouncedTask } from './observe.ts';
 import type { ContentMessage } from '../shared/messages.ts';
 
 const CAPTURE_DELAY_MS = 350;
+const ERROR_SETTLE_DELAY_MS = 5_000;
+const startedAt = Date.now();
 let lastResultSignature = '';
 
 const captureTask = createDebouncedTask(
@@ -29,12 +31,18 @@ observer.observe(document.documentElement, {
 	subtree: true
 });
 captureTask.schedule();
+const retryTimers = [1_200, 2_800, 5_200].map((delayMs) =>
+	window.setTimeout(() => {
+		captureTask.schedule();
+	}, delayMs)
+);
 
 window.addEventListener(
 	'pagehide',
 	() => {
 		observer.disconnect();
 		captureTask.cancel();
+		for (const timer of retryTimers) window.clearTimeout(timer);
 	},
 	{ once: true }
 );
@@ -69,6 +77,9 @@ async function captureCurrentPage(): Promise<void> {
 }
 
 function shouldReportCaptureError(): boolean {
+	if (document.readyState !== 'complete' || Date.now() - startedAt < ERROR_SETTLE_DELAY_MS) {
+		return false;
+	}
 	const url = new URL(window.location.href);
 	if (url.hostname === 'mybk.hcmut.edu.vn') {
 		return url.pathname.includes('/he-thong-quan-ly/sinh-vien/tkb');

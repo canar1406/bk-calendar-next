@@ -17,8 +17,10 @@ export function buildScheduleWeeks(events: ManagedEvent[]): ScheduleWeek[] {
 	for (const event of events) {
 		const start = Date.parse(event.start);
 		const end = Date.parse(event.end);
-		for (const weekIndex of event.activeWeekIndexes) {
+		const exclusions = new Set(event.excludedStarts.map(Date.parse));
+		for (const weekIndex of new Set(event.activeWeekIndexes)) {
 			const occurrenceStart = start + weekIndex * WEEK_MS;
+			if (exclusions.has(occurrenceStart)) continue;
 			const occurrenceEnd = end + weekIndex * WEEK_MS;
 			const mondayKey = mondayKeyForOccurrence(
 				new Date(occurrenceStart),

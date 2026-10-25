@@ -1,7 +1,11 @@
-import { CALENDAR_SCOPE } from '../../../../packages/google-calendar/src/oauth.ts';
+import {
+	CALENDAR_SCOPE,
+	HCMUT_HOSTED_DOMAIN
+} from '../../../../packages/google-calendar/src/oauth.ts';
+import { GoogleOAuthError } from '../../../../packages/google-calendar/src/auth-errors.ts';
 
 export const GOOGLE_WEB_CLIENT_ID =
-	'290456536857-ujdg26n2gqovjc27h2mqrd9p6vhm7pbp.apps.googleusercontent.com';
+	'937100842777-d5d9ug5hi8ka60bnkkjv5e62ip7e2dre.apps.googleusercontent.com';
 
 export interface ExtensionIdentityApi {
 	getAuthToken?(details: { interactive: boolean }): Promise<{ token?: string }>;
@@ -114,8 +118,9 @@ async function requestWebFlowToken(
 		response_type: 'token',
 		scope: CALENDAR_SCOPE,
 		state,
+		hd: HCMUT_HOSTED_DOMAIN,
 		include_granted_scopes: 'true',
-		prompt: interactive ? 'select_account consent' : 'none'
+		prompt: interactive ? 'select_account' : 'none'
 	}).toString();
 
 	let responseUrl: string | undefined;
@@ -147,6 +152,14 @@ async function requestWebFlowToken(
 		redirected.hostname === 'accounts.google.com' &&
 		redirected.pathname.startsWith('/signin/oauth/error')
 	) {
+		if (!responseUrl.includes('redirect_uri_mismatch')) {
+			throw new GoogleOAuthError(
+				redirected.searchParams.get('error') ??
+					redirected.searchParams.get('authError') ??
+					'oauth_configuration',
+				'Google từ chối đăng nhập. Chủ ứng dụng cần kiểm tra giới hạn người dùng và xác minh OAuth trong Google Cloud.'
+			);
+		}
 		throw new Error(
 			`Google OAuth từ chối redirect URI. Hãy thêm Authorized redirect URI sau vào Google Cloud: ${redirectUri}`
 		);
@@ -155,7 +168,7 @@ async function requestWebFlowToken(
 	if (params.get('state') !== state) throw new Error('Phản hồi Google OAuth không hợp lệ.');
 	const error = params.get('error');
 	if (error) {
-		throw new Error(params.get('error_description') || `Google OAuth: ${error}`);
+		throw new GoogleOAuthError(error, params.get('error_description') ?? '');
 	}
 	const token = params.get('access_token');
 	if (!token) throw new Error('Google OAuth không trả về access token.');

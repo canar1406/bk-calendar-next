@@ -9,6 +9,7 @@ export async function stageMyBkCapture(
 ) {
 	const snapshot = await createSourceSnapshot(capture.raw, capture.sourceKind ?? 'student-2024', {
 		capturedAt,
+		...(capture.scheduleKind ? { scheduleKind: capture.scheduleKind } : {}),
 		completeness: capture.completeness
 	});
 	const staged = await stageSnapshot(store, snapshot);

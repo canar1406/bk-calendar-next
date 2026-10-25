@@ -9,7 +9,10 @@ import {
 	type CaptureCompleteness,
 	type ManagedEvent
 } from '../../../packages/timetable/src/index.ts';
-import { GoogleCalendarApiError } from '../../../packages/google-calendar/src/index.ts';
+import {
+	GoogleCalendarApiError,
+	GoogleCalendarRestGateway
+} from '../../../packages/google-calendar/src/index.ts';
 import {
 	createProfileStore,
 	type KeyValueStorage,
@@ -64,6 +67,36 @@ const event: ManagedEvent = {
 };
 
 describe('Google profile sync workflow', () => {
+	it('never adopts a legacy class calendar for an exam profile', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = {
+			...(await snapshot([event], { state: 'complete', parsedRows: 1, expectedRows: 1 })),
+			scheduleKind: 'exams' as const
+		};
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261:exams',
+			sourceKind: 'student-2024',
+			scheduleKind: 'exams',
+			semester: 261,
+			calendarName: 'BKalendar • Lịch thi • HK 261',
+			pendingSnapshot: pending
+		});
+		let legacyLookups = 0;
+		const synced = await syncPendingProfile(store, 'student-2024:261:exams', {
+			gateway: emptyGateway(),
+			async findLegacyCalendars() {
+				legacyLookups++;
+				return [{ id: 'class-calendar' }];
+			},
+			async createCalendar() {
+				return { id: 'exam-calendar' };
+			}
+		});
+		assert.equal(legacyLookups, 0);
+		assert.equal(synced.profile.calendarId, 'exam-calendar');
+	});
+
 	it('re-authenticates once after Google reports an expired token', async () => {
 		let tokenRequests = 0;
 		let syncAttempts = 0;
@@ -260,6 +293,146 @@ describe('Google profile sync workflow', () => {
 		assert.equal(inserted, 1);
 		assert.equal(synced.profile.calendarOrigin, 'legacy');
 		assert.equal(synced.promoted, true);
+	});
+
+	it('preserves prototype methods when migrating a legacy calendar through GoogleCalendarRestGateway', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = await snapshot([event], {
+			state: 'complete',
+			parsedRows: 1,
+			expectedRows: 1
+		});
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			calendarId: 'legacy-student-calendar',
+			calendarOrigin: 'legacy',
+			pendingSnapshot: pending
+		});
+		const methods: string[] = [];
+		const gateway = new GoogleCalendarRestGateway('token', async (_url, init) => {
+			methods.push(init?.method ?? 'GET');
+			if ((init?.method ?? 'GET') === 'GET') {
+				return new Response(JSON.stringify({ items: [] }), {
+					status: 200,
+					headers: { 'content-type': 'application/json' }
+				});
+			}
+			return new Response(
+				JSON.stringify({
+					id: 'created-event-id',
+					etag: 'etag-1',
+					extendedProperties: {
+						private: { stableKey: event.stableKey, fingerprint: event.fingerprint ?? '' }
+					}
+				}),
+				{ status: 200, headers: { 'content-type': 'application/json' } }
+			);
+		});
+
+		const synced = await syncPendingProfile(store, 'student-2024:261', {
+			gateway,
+			async createCalendar() {
+				throw new Error('must reuse legacy calendar');
+			}
+		});
+
+		assert.deepEqual(methods, ['GET', 'POST']);
+		assert.equal(synced.result.inserted, 1);
+		assert.equal(synced.result.failed.length, 0);
+		assert.equal(synced.promoted, true);
+	});
+
+	it('deduplicates same-course legacy events across +07:00 timestamps and extra SV calendars', async () => {
+		const store = createProfileStore(new MemoryStorage());
+		const pending = await snapshot([event], {
+			state: 'unknown',
+			parsedRows: 1
+		});
+		await store.save({
+			schemaVersion: 1,
+			profileId: 'student-2024:261',
+			sourceKind: 'student-2024',
+			semester: 261,
+			calendarName: 'BKalendar • HK 261',
+			calendarId: 'sv261-primary',
+			calendarOrigin: 'legacy',
+			pendingSnapshot: pending
+		});
+		const deleted: string[] = [];
+		const patched: string[] = [];
+
+		const synced = await syncPendingProfile(store, 'student-2024:261', {
+			gateway: {
+				...emptyGateway(),
+				async listCalendarEvents(calendarId) {
+					if (calendarId === 'sv261-primary') {
+						return [
+							{
+								id: 'legacy-offset-match',
+								stableKey: 'legacy:legacy-offset-match',
+								fingerprint: 'legacy:legacy-offset-match',
+								summary: 'Giải tích 1',
+								description: 'mã môn học: MT1003',
+								location: 'H1-GĐH1',
+								start: '2026-08-24T07:00:00+07:00',
+								end: '2026-08-24T09:50:00+07:00'
+							},
+							{
+								id: 'legacy-duplicate-same-course',
+								stableKey: 'legacy:legacy-duplicate-same-course',
+								fingerprint: 'legacy:legacy-duplicate-same-course',
+								summary: 'Giải tích 1',
+								description: 'mã môn học: MT1003',
+								location: 'H1-GĐH1',
+								start: '2026-08-24T07:00:00+07:00',
+								end: '2026-08-24T09:50:00+07:00'
+							}
+						];
+					}
+					if (calendarId === 'sv261-duplicate-cal') {
+						return [
+							{
+								id: 'other-cal-event',
+								stableKey: 'legacy:other-cal-event',
+								fingerprint: 'legacy:other-cal-event',
+								summary: 'Giải tích 1',
+								description: 'mã môn học: MT1003',
+								location: 'H1-GĐH1',
+								start: '2026-08-24T07:00:00+07:00',
+								end: '2026-08-24T09:50:00+07:00'
+							}
+						];
+					}
+					return [];
+				},
+				async patchEvent(calendarId, eventId, localEvent) {
+					patched.push(`${calendarId}:${eventId}`);
+					return remote(localEvent);
+				},
+				async deleteEvent(calendarId, eventId) {
+					deleted.push(`${calendarId}:${eventId}`);
+				}
+			},
+			async findLegacyCalendars() {
+				return [{ id: 'sv261-primary' }, { id: 'sv261-duplicate-cal' }];
+			},
+			async createCalendar() {
+				throw new Error('must not create a new calendar');
+			}
+		});
+
+		assert.deepEqual(patched, ['sv261-primary:legacy-offset-match']);
+		assert.deepEqual(deleted, [
+			'sv261-primary:legacy-duplicate-same-course',
+			'sv261-duplicate-cal:other-cal-event'
+		]);
+		assert.equal(synced.result.inserted, 0);
+		assert.equal(synced.result.patched, 1);
+		assert.equal(synced.result.deleted, 2);
 	});
 
 	it('persists a newly created calendar ID before inserting events and then promotes the snapshot', async () => {

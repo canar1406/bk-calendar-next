@@ -29,9 +29,37 @@ export interface GoogleCalendarResource {
 	deleted?: boolean;
 }
 
+export function formatGoogleEventSummary(event: ManagedEvent): string {
+	const code = event.courseCode.trim();
+	const title = event.title.trim();
+	const group = (event.group || event.metadata.group || '').trim();
+	const credits = (event.metadata.credits ?? '').trim();
+
+	const normalizedCode = code.normalize('NFKC').toLocaleLowerCase('vi');
+	const normalizedTitle = title.normalize('NFKC').toLocaleLowerCase('vi');
+	const hasCodePrefix =
+		!code ||
+		normalizedCode === normalizedTitle ||
+		normalizedTitle.startsWith(`[${normalizedCode}]`) ||
+		normalizedTitle.startsWith(`${normalizedCode} `);
+	const baseTitle = hasCodePrefix ? title : `[${code}] ${title}`;
+
+	const suffixParts: string[] = [];
+	if (group && !normalizedTitle.includes(`(${group.normalize('NFKC').toLocaleLowerCase('vi')}`)) {
+		suffixParts.push(group);
+	}
+	if (credits) {
+		suffixParts.push(`${credits} TC`);
+	}
+	const withSuffix =
+		suffixParts.length > 0 ? `${baseTitle} (${suffixParts.join(' - ')})` : baseTitle;
+	return event.icon ? `${event.icon} ${withSuffix}` : withSuffix;
+}
+
 export function toGoogleEventResource(event: ManagedEvent): GoogleEventResource {
+	const recurrence = recurrenceLines(event);
 	return {
-		summary: event.icon ? `${event.icon} ${event.title}` : event.title,
+		summary: formatGoogleEventSummary(event),
 		description: Object.entries(event.metadata)
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([key, value]) => `${key}: ${value}`)
@@ -39,7 +67,7 @@ export function toGoogleEventResource(event: ManagedEvent): GoogleEventResource 
 		location: event.location,
 		start: { dateTime: event.start, timeZone: event.timeZone },
 		end: { dateTime: event.end, timeZone: event.timeZone },
-		recurrence: recurrenceLines(event),
+		...(recurrence.length > 0 ? { recurrence } : {}),
 		...(event.colorId ? { colorId: event.colorId } : {}),
 		extendedProperties: {
 			private: {
@@ -252,7 +280,7 @@ export class GoogleCalendarRestGateway implements GoogleCalendarGateway {
 			{
 				method: 'PATCH',
 				...(etag ? { headers: { 'If-Match': etag } } : {}),
-				body: JSON.stringify(toGoogleEventResource(event))
+				body: JSON.stringify({ recurrence: [], ...toGoogleEventResource(event) })
 			}
 		);
 		return asManaged(resource, event);
@@ -347,17 +375,30 @@ async function request(
 		...toHeaderRecord(init.headers)
 	};
 	if (init.body !== undefined) headers['Content-Type'] = 'application/json';
-	const response = await fetcher(url, { ...init, headers });
-	if (!response.ok) {
-		let detail = '';
-		try {
-			detail = JSON.stringify(await response.json());
-		} catch {
-			detail = await response.text();
+	for (let attempt = 0; ; attempt++) {
+		const response = await fetcher(url, { ...init, headers });
+		if (response.ok) return response;
+		const detail = (await response.text()) || response.statusText;
+		const transientQuota =
+			response.status === 429 ||
+			(response.status === 403 && /(?:user)?rateLimitExceeded/iu.test(detail));
+		const safeServerRetry =
+			['GET', 'PATCH', 'DELETE'].includes(init.method ?? 'GET') &&
+			[500, 502, 503, 504].includes(response.status);
+		if (attempt < 2 && (transientQuota || safeServerRetry)) {
+			const retryAfter = response.headers.get('Retry-After');
+			const seconds = retryAfter === null ? NaN : Number(retryAfter);
+			const dateDelay = retryAfter === null ? NaN : Date.parse(retryAfter) - Date.now();
+			const delay = Number.isFinite(seconds)
+				? seconds * 1000
+				: Number.isFinite(dateDelay)
+					? dateDelay
+					: 500 * 2 ** attempt + Math.random() * 200;
+			await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(delay, 30_000))));
+			continue;
 		}
 		throw new GoogleCalendarApiError(response.status, detail || response.statusText);
 	}
-	return response;
 }
 
 function toHeaderRecord(headers?: HeadersInit): Record<string, string> {
@@ -372,7 +413,11 @@ export class GoogleCalendarApiError extends Error {
 	readonly detail: string;
 
 	constructor(status: number, detail: string) {
-		super(`Google Calendar API ${status}: ${detail}`);
+		const quota =
+			status === 429 || (status === 403 && /rateLimitExceeded|quotaExceeded/iu.test(detail));
+		super(
+			`Google Calendar API ${status}: ${quota ? 'Google tạm giới hạn đồng bộ. Hãy chờ vài phút rồi thử lại; không cần đăng nhập lại. ' : ''}${detail}`
+		);
 		this.name = 'GoogleCalendarApiError';
 		this.status = status;
 		this.detail = detail;
@@ -383,9 +428,13 @@ export function isGoogleCalendarAuthError(error: unknown): boolean {
 	return (
 		(error instanceof GoogleCalendarApiError &&
 			(error.status === 401 ||
-				/invalid credentials|invalid_token|unauthorized/i.test(error.detail))) ||
+				/invalid credentials|invalid_token|unauthorized|access_token_scope_insufficient|insufficient authentication scopes|insufficient permission/i.test(
+					error.detail
+				))) ||
 		(error instanceof Error &&
-			/google calendar api 401|invalid credentials|invalid_token|unauthorized/i.test(error.message))
+			/google calendar api 401|invalid credentials|invalid_token|unauthorized|access_token_scope_insufficient|insufficient authentication scopes|insufficient permission/i.test(
+				error.message
+			))
 	);
 }
 

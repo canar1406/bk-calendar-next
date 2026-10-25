@@ -22,7 +22,46 @@
 		title: string;
 	}
 
+	const CURATED_CATEGORIES = new Set([
+		'Chung',
+		'Học tập',
+		'STEM',
+		'Khoa học',
+		'Công nghệ',
+		'Kỹ thuật',
+		'Kinh tế',
+		'Xã hội',
+		'Sáng tạo',
+		'Thể thao',
+		'Y khoa',
+		'Môi trường',
+		'Ngôn ngữ',
+		'Sự kiện',
+		'Di chuyển'
+	]);
+
+	const ICON_CATEGORY_TABS = [
+		{ id: 'recommended', label: 'Đề xuất môn học' },
+		{ id: 'all', label: 'Tất cả' },
+		{ id: 'Học tập', label: 'Học tập' },
+		{ id: 'STEM', label: 'STEM' },
+		{ id: 'Công nghệ', label: 'Công nghệ' },
+		{ id: 'Kỹ thuật', label: 'Kỹ thuật' },
+		{ id: 'Thể thao', label: 'Thể thao' },
+		{ id: 'Cảm xúc', label: 'Cảm xúc' },
+		{ id: 'Con người', label: 'Con người' },
+		{ id: 'Thiên nhiên', label: 'Thiên nhiên' },
+		{ id: 'Ẩm thực', label: 'Ẩm thực' },
+		{ id: 'Địa điểm', label: 'Địa điểm' },
+		{ id: 'Hoạt động', label: 'Hoạt động' },
+		{ id: 'Đồ vật', label: 'Đồ vật' },
+		{ id: 'Biểu tượng', label: 'Biểu tượng' },
+		{ id: 'Quốc kỳ', label: 'Quốc kỳ' }
+	];
+
 	let iconQuery = '';
+	let iconCategory = 'recommended';
+	let iconRenderLimit = 240;
 	let customIcon = '';
 	$: courses = summarizeCourses(events);
 	$: assignments = buildCourseColorAssignments(events, preferences);
@@ -33,12 +72,19 @@
 		]!;
 	$: filteredIcons = COURSE_ICONS.filter((icon) => {
 		const query = iconQuery.trim().toLocaleLowerCase('vi-VN');
-		return (
-			query === '' ||
-			icon.label.toLocaleLowerCase('vi-VN').includes(query) ||
-			icon.category.toLocaleLowerCase('vi-VN').includes(query)
-		);
+		if (query !== '') {
+			return (
+				icon.label.toLocaleLowerCase('vi-VN').includes(query) ||
+				icon.category.toLocaleLowerCase('vi-VN').includes(query) ||
+				(icon.keywords?.toLocaleLowerCase('vi-VN').includes(query) ?? false) ||
+				icon.value.includes(query)
+			);
+		}
+		if (iconCategory === 'all') return true;
+		if (iconCategory === 'recommended') return CURATED_CATEGORIES.has(icon.category);
+		return icon.category === iconCategory || icon.value === '';
 	});
+	$: visibleIcons = filteredIcons.slice(0, iconRenderLimit);
 
 	function update(next: CourseColorPreferences): void {
 		onChange(next);
@@ -254,11 +300,27 @@
 								<input
 									type="search"
 									bind:value={iconQuery}
-									placeholder={`Tìm trong ${COURSE_ICONS.length} icon…`}
+									placeholder={`Tìm trong ${COURSE_ICONS.length} emoji (Việt / Anh)…`}
 									aria-label={`Tìm icon cho ${course.courseCode}`}
 								/>
+								<div class="icon-categories" role="tablist" aria-label="Nhóm emoji">
+									{#each ICON_CATEGORY_TABS as tab}
+										<button
+											type="button"
+											class="category-pill"
+											class:active={iconQuery.trim() === '' && iconCategory === tab.id}
+											on:click={() => {
+												iconCategory = tab.id;
+												iconQuery = '';
+												iconRenderLimit = 240;
+											}}
+										>
+											{tab.label}
+										</button>
+									{/each}
+								</div>
 								<p class="icon-count">
-									{filteredIcons.length} lựa chọn · tìm theo tên hoặc nhóm như STEM, Y khoa, Thể thao
+									{filteredIcons.length} lựa chọn · kho {COURSE_ICONS.length} emoji Unicode chuẩn
 								</p>
 								<div class="custom-icon">
 									<input
@@ -266,7 +328,7 @@
 										bind:value={customIcon}
 										placeholder="Dán emoji bất kỳ"
 										aria-label={`Dán emoji bất kỳ cho ${course.courseCode}`}
-										maxlength="12"
+										maxlength="24"
 									/>
 									<button
 										type="button"
@@ -276,7 +338,7 @@
 								</div>
 							</div>
 							<div class="icon-grid">
-								{#each filteredIcons as icon}
+								{#each visibleIcons as icon}
 									<button
 										type="button"
 										class:selected={icon.value === selectedIcon}
@@ -289,6 +351,15 @@
 									</button>
 								{/each}
 							</div>
+							{#if filteredIcons.length > visibleIcons.length}
+								<button
+									type="button"
+									class="load-more-icons"
+									on:click={() => (iconRenderLimit += 300)}
+								>
+									Xem thêm emoji ({filteredIcons.length - visibleIcons.length} còn lại)
+								</button>
+							{/if}
 						</div>
 					</details>
 				</article>
@@ -616,8 +687,8 @@
 	}
 
 	.icon-palette {
-		width: 292px;
-		max-height: 350px;
+		width: 344px;
+		max-height: 410px;
 		overflow-y: auto;
 	}
 
@@ -630,6 +701,41 @@
 		margin: -2px -2px 9px;
 		padding: 2px 2px 9px;
 		background: var(--surface-raised);
+	}
+
+	.icon-categories {
+		display: flex;
+		gap: 5px;
+		overflow-x: auto;
+		padding-bottom: 3px;
+		scrollbar-width: thin;
+	}
+
+	.category-pill {
+		flex: 0 0 auto;
+		min-height: 25px;
+		padding: 0 8px;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		color: var(--muted);
+		background: var(--surface);
+		font: inherit;
+		font-size: 0.59rem;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: all 0.14s ease;
+	}
+
+	.category-pill:hover {
+		color: var(--ink);
+		border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+	}
+
+	.category-pill.active {
+		color: var(--blue);
+		border-color: var(--blue);
+		background: color-mix(in srgb, var(--blue) 14%, var(--surface));
 	}
 
 	.icon-tools input {
@@ -676,7 +782,7 @@
 
 	.icon-grid {
 		display: grid;
-		grid-template-columns: repeat(4, 58px);
+		grid-template-columns: repeat(5, minmax(0, 1fr));
 		gap: 6px;
 	}
 
@@ -685,26 +791,45 @@
 		min-height: 52px;
 		place-items: center;
 		gap: 2px;
-		padding: 5px;
+		padding: 4px;
 		border: 1px solid var(--line);
 		border-radius: 9px;
 		color: var(--ink);
 		background: var(--surface);
 		cursor: pointer;
+		overflow: hidden;
 	}
 
 	.icon-grid > button > span {
-		font-size: 1rem;
+		font-size: 1.08rem;
 	}
 
 	.icon-grid small {
+		max-width: 100%;
+		overflow: hidden;
 		color: var(--muted);
-		font-size: 0.56rem;
+		font-size: 0.52rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.icon-grid > button.selected {
 		border-color: var(--blue);
 		background: color-mix(in srgb, var(--blue) 10%, var(--surface));
+	}
+
+	.load-more-icons {
+		width: 100%;
+		min-height: 32px;
+		margin-top: 8px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		color: var(--blue);
+		background: var(--surface);
+		font: inherit;
+		font-size: 0.62rem;
+		font-weight: 600;
+		cursor: pointer;
 	}
 
 	@media (max-width: 720px) {

@@ -1,14 +1,25 @@
 # BKalendar Next
 
 BKalendar Next giúp sinh viên và giảng viên HCMUT chuyển thời khóa biểu sang
-Google Calendar hoặc file `.ics`, xem lịch theo tuần và theo dõi thay đổi
-phòng học, giờ học, tuần học.
+và lịch thi sang Google Calendar hoặc file `.ics`, xem lịch theo tuần, xuất
+hình nền PNG và theo dõi thay đổi phòng học, giờ học, tuần học.
 
 Dự án được phát triển kế thừa [BKalendar gốc](https://bkalendar.github.io/),
 với giao diện mới, so sánh thay đổi lịch và extension kiểm tra MyBK định kỳ.
 
 [Mở website](https://canar1406.github.io/bk-calendar-next/) ·
 [Tải extension](https://github.com/canar1406/bk-calendar-next/releases/latest)
+
+## Thay đổi đang phát triển
+
+- Đọc bảng lịch thi theo ngày cụ thể; tách hồ sơ và calendar khỏi lịch học.
+- Xuất hình nền PNG: điện thoại 1080 × 2400 hoặc máy tính 2560 × 1440,
+  nền sáng/tối, giữ màu và icon môn học.
+- File `.ics` từ website dùng từng sự kiện UTC độc lập, không phụ thuộc
+  khả năng xử lý recurrence hoặc timezone của trình nhập.
+- Không buộc cấp consent lại hoặc thu hồi grant sau mỗi lượt đồng bộ.
+  Giữ token website trong bộ nhớ ngắn hạn, xử lý đóng/chặn popup và thử lại
+  có giới hạn khi Calendar API trả quota tạm thời.
 
 ## Bản 0.5.6
 
@@ -23,7 +34,12 @@ với giao diện mới, so sánh thay đổi lịch và extension kiểm tra My
 
 - Extension chưa chạy ẩn hoàn toàn: tab nền có thể xuất hiện tạm thời.
 - Kiểm tra định kỳ cần trình duyệt đang chạy, có mạng và phiên đăng nhập hợp lệ.
-- Apple Calendar chỉ hỗ trợ nhập file `.ics` một lần.
+- Tích hợp Apple Calendar hiện là nhập `.ics` một lần, chưa đồng bộ tự động.
+- Giới hạn người dùng / xác minh OAuth thuộc Google Cloud; mã nguồn không
+  thể bỏ giới hạn đăng nhập do Google áp đặt.
+- Parser lịch thi được kiểm thử bằng bảng mẫu tổng hợp, chưa có mẫu MyBK
+  thực tế đã ẩn thông tin từ người dùng. Không suy đoán endpoint lịch thi;
+  theo dõi nền vẫn sử dụng các trang TKB hiện có.
 - Các portal HCMUT có thể thay đổi giao diện hoặc cách đăng nhập, ảnh hưởng
   đến việc đọc lịch.
 - Chưa kiểm thử đầy đủ mọi loại tài khoản và mọi tình huống đăng nhập,
@@ -39,6 +55,8 @@ với giao diện mới, so sánh thay đổi lịch và extension kiểm tra My
 - Phát hiện môn thêm mới, lịch đổi phòng, đổi giờ, đổi tuần học hoặc bị xóa.
 - Chặn thao tác xóa nếu MyBK chưa trả về đầy đủ tất cả các dòng.
 - Xuất file `.ics` cho Apple Calendar và các ứng dụng lịch tương thích.
+- Đọc lịch thi có ngày, giờ và thời lượng hoặc giờ kết thúc.
+- Xuất PNG đồ họa theo tuần học đang chọn hoặc toàn bộ ca thi đã có ngày.
 - Chọn một màu, màu riêng theo môn hoặc xáo màu ngẫu nhiên.
 - Chọn icon theo môn với hơn 180 icon và hỗ trợ emoji tùy chỉnh.
 - Extension có chế độ hỏi trước hoặc tự động cập nhật và thông báo sau.
@@ -82,12 +100,49 @@ Calendar và các trang MyBK/CAS phục vụ việc theo dõi trong nền.
 1. Mở trang thời khóa biểu HCMUT và chọn học kỳ cần dùng.
 2. Sao chép nội dung gồm thông tin học kỳ, tiêu đề bảng, toàn bộ dòng lịch và
    phần tổng số dòng ở cuối bảng nếu có. Không sao chép mật khẩu hoặc cookie.
-3. Mở BKalendar Next, chọn đúng loại lịch rồi dán nội dung vào ô nhập.
+3. Mở BKalendar Next, chọn nội dung lịch học/lịch thi (hoặc tự nhận diện)
+   và đúng nguồn dữ liệu rồi dán vào ô nhập.
 4. Nhập lịch và kiểm tra bản xem trước theo tuần cùng phần thay đổi.
 5. Chọn màu, icon cho từng môn nếu muốn.
-6. Chọn đồng bộ Google Calendar hoặc tải `.ics` để nhập vào ứng dụng lịch khác.
+6. Chọn đồng bộ Google Calendar, tải `.ics` hoặc tạo hình nền PNG.
 
 Dữ liệu mẫu chỉ dùng để xem trước, không dùng để xuất hoặc đồng bộ lịch thật.
+
+### Nhập lịch thi
+
+Sao chép **tiêu đề cột cùng toàn bộ bảng**, giữ dấu tab giữa các cột.
+Các cột được nhận diện theo tên, không bắt buộc đúng thứ tự:
+
+- Bắt buộc: `Tên môn học`, `Ngày thi`, `Giờ thi`.
+- Cần có `Số phút` / `Thời lượng`, `Giờ kết thúc`, hoặc khoảng giờ trong
+  `Giờ thi` (ví dụ `13:00 - 15:00`). Không tự đoán thời lượng bài thi.
+- Tùy chọn: `Mã MH`, `Nhóm - tổ`, `Phòng thi`, `Cơ sở`, `Loại thi`,
+  `Hình thức thi`.
+- Ngày hỗ trợ `DD/MM/YYYY`, `YYYY-MM-DD`. Giờ hỗ trợ `07:30`, `9h30`.
+- Nếu không sao chép tiêu đề học kỳ, nhập mã như `261` vào ô học kỳ.
+- Ca chưa có ngày được cảnh báo và bỏ qua; bản nhập đó không cho phép
+  đồng bộ xóa. Bảng không có tổng số dòng cũng không cho phép xóa.
+
+Ví dụ dữ liệu tổng hợp (không phải lịch thi chính thức):
+[`fixtures/mybk-exams-261.txt`](fixtures/mybk-exams-261.txt).
+
+Hồ sơ lịch thi dùng hậu tố `:exams`, calendar tên
+`BKalendar • Lịch thi • HK 261`; không nhận lại calendar TKB legacy.
+Nếu cùng môn/nhóm/loại có nhiều ca nhưng không có ID riêng, thứ tự dòng
+được chuẩn hóa và hiển thị cảnh báo để người dùng kiểm tra thay đổi.
+
+### Hình nền PNG
+
+Ở phần **Mang lịch lên màn hình**, chọn khổ điện thoại/máy tính và màu nền,
+xem trước rồi bấm **Tải hình nền PNG**.
+
+- Lịch học chỉ xuất **tuần đang chọn** ở bảng xem trước, có ghi tuần và
+  khoảng ngày trên ảnh. Không gộp các tuần khác nhau thành một TKB giả.
+- Lịch thi xuất tất cả ca đã có ngày, theo thứ tự thời gian.
+- Nếu quá nhiều mục để đọc rõ trên một ảnh, ứng dụng báo lỗi thay vì
+  âm thầm bỏ bớt sự kiện. Thử khổ máy tính hoặc dùng `.ics`.
+- Ảnh được vẽ tại trình duyệt bằng Canvas và font tự phục vụ, không tải
+  dữ liệu lên dịch vụ tạo ảnh. PNG không tự cập nhật khi lịch thay đổi.
 
 ## Thiết lập extension
 
@@ -255,6 +310,35 @@ Calendar để đồng bộ và chuyển lịch cũ; việc phát hành trên Gi
 nghĩa ứng dụng đã được Google xác minh. Nếu chưa muốn cấp quyền, có thể dùng
 chức năng tải `.ics` mà không kết nối Google.
 
+### Phân biệt lỗi giới hạn Google
+
+- **Testing / Access denied:** kiểm tra Google Auth Platform → Audience →
+  Test users. Chỉ email được chủ ứng dụng thêm mới được dùng chế độ thử
+  nghiệm khi yêu cầu các scope Calendar hiện tại.
+- **Sign-in limit / user cap:** ứng dụng External chưa xác minh có thể bị
+  chặn thêm người dùng. Chủ dự án cần hoàn tất xác minh thích hợp trong
+  Verification Center; chỉ chuyển Publishing status không đảm bảo bỏ cap.
+  Không tạo project/tài khoản luân phiên để né giới hạn.
+- **redirect_uri_mismatch / invalid_client:** kiểm tra đúng OAuth client,
+  Authorized JavaScript origins cho web và redirect URI cho extension.
+- **admin_policy_enforced / org_internal:** cần quản trị Google Workspace
+  hoặc chủ dự án kiểm tra chính sách và loại người dùng ứng dụng.
+- **API 403 rateLimitExceeded / 429:** quota ghi/đọc tạm thời khác với giới
+  hạn người đăng nhập. Code thử lại tối đa hai lần có backoff (ba request
+  tổng cộng), tôn trọng Retry-After tối đa 30 giây mỗi lần. Lỗi quyền 403
+  không bị thử lại như lỗi quota; lỗi 5xx chỉ tự thử lại thao tác an toàn.
+
+Website không lưu token vào localStorage hoặc cookie và không thu hồi
+grant sau mỗi lượt sync, tránh buộc người dùng đồng ý lặp lại và làm ảnh
+hưởng quyền của extension. Token hết hạn/401 bị loại khỏi cache trước khi
+yêu cầu lại một lần. Đóng/tải lại trang sẽ bỏ cache trong bộ nhớ.
+
+Tài liệu Google:
+[trạng thái và giới hạn OAuth](https://developers.google.com/identity/protocols/oauth2/production-readiness/overview),
+[lỗi Calendar API](https://developers.google.com/workspace/calendar/api/guides/errors).
+Không có kiểm thử với tài khoản Google thật trong thay đổi này; cần cung cấp
+mã lỗi đầy đủ để xác nhận nguyên nhân cụ thể của lần đăng nhập bị chặn.
+
 Khi dùng bản extension unpacked hiện tại trên Edge/Chrome, OAuth client loại
 **Web application** dùng cho luồng đăng nhập extension phải có Authorized
 redirect URI:
@@ -283,11 +367,25 @@ PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 
 Không đặt client secret, access token, refresh token hoặc API key vào file này.
 
-## Apple Calendar
+## Nhập file .ics
 
 BKalendar hiện hỗ trợ tạo và tải file `.ics` để nhập một lần vào Apple
 Calendar. Dự án chưa cung cấp WebCal, CalDAV hoặc đồng bộ Apple Calendar tự
 động.
+
+- macOS: Calendar → File → Import, chọn `.ics`, sau đó chọn lịch đích.
+- Google Calendar trên máy tính: Cài đặt → Nhập và xuất → Nhập, chọn `.ics`.
+- iPhone/iPad: nút **Chia sẻ file lịch** dùng bảng chia sẻ của trình duyệt
+  nếu có hỗ trợ, không bảo đảm xuất hiện đích Calendar. Nếu mở file trong
+  Safari/Files không có thao tác thêm lịch, nhập trên Mac cùng iCloud hoặc
+  Google Calendar web rồi đồng bộ xuống điện thoại.
+- Nút **Tải file .ics** luôn tải file, không tự chuyển thành chia sẻ.
+- File dùng UTF-8, CRLF và gấp dòng theo byte; giờ xuất UTC, giữ tuần học
+  đang hoạt động và bỏ ngày nghỉ. Mỗi lần xuất cùng sự kiện có UID ổn định.
+- Chỉ nhập một lần để tránh bản sao; đây không phải subscription.
+
+Test phân tích file bằng parser độc lập `ical.js`. Chưa xác nhận nhập trực
+tiếp trong Apple Calendar hoặc Google Calendar bằng tài khoản thật.
 
 ## Repository tham chiếu
 

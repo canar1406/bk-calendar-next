@@ -42,14 +42,14 @@ jobs:
       - name: Check formatting
         run: pnpm exec prettier --check .
 
-      - name: Run tests
-        run: pnpm test
-
       - name: Run typechecks
         run: pnpm check
 
       - name: Build all workspaces
         run: pnpm build
+
+      - name: Run tests
+        run: pnpm test
 
       - name: Package Chrome and Edge extension
         run: node scripts/package-extension.mjs

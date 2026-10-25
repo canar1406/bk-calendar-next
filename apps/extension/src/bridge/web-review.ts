@@ -49,14 +49,26 @@ interface TransferContext {
 	postResponse(response: ExtensionTransferResponse | ExtensionStateReply): void;
 }
 
+export function isTrustedReviewOrigin(origin: string): boolean {
+	if (origin === REVIEW_ORIGIN) return true;
+	try {
+		const url = new URL(origin);
+		return (
+			url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+		);
+	} catch {
+		return false;
+	}
+}
+
 export async function handleExtensionTransferMessage(
 	event: TransferMessageEvent,
 	context: TransferContext
 ): Promise<boolean> {
 	if (
 		event.source !== context.windowSource ||
-		event.origin !== REVIEW_ORIGIN ||
-		context.origin !== REVIEW_ORIGIN ||
+		event.origin !== context.origin ||
+		!isTrustedReviewOrigin(event.origin) ||
 		!context.pathname.startsWith(REVIEW_PATH_PREFIX)
 	) {
 		return false;
@@ -216,7 +228,9 @@ if (typeof window !== 'undefined' && typeof chrome !== 'undefined') {
 					});
 				},
 				postResponse(response) {
-					window.postMessage(response, REVIEW_ORIGIN);
+					if (isTrustedReviewOrigin(window.location.origin)) {
+						window.postMessage(response, window.location.origin);
+					}
 				}
 			}).catch(() => {
 				// Ignore stale bridge calls after an unpacked extension reload.
@@ -230,7 +244,9 @@ if (typeof window !== 'undefined' && typeof chrome !== 'undefined') {
 					return;
 				}
 				if (!isWebBridgeStatePush(message)) return;
-				window.postMessage(createExtensionStateUpdate(message.state), REVIEW_ORIGIN);
+				if (isTrustedReviewOrigin(window.location.origin)) {
+					window.postMessage(createExtensionStateUpdate(message.state), window.location.origin);
+				}
 			});
 		}
 	}

@@ -9,6 +9,7 @@ export { parseLecturer } from './parser/lecturer.ts';
 export { parsePostgraduate } from './parser/postgraduate.ts';
 export { parseStudent } from './parser/student.ts';
 export { parseStudent2024 } from './parser/student-2024.ts';
+export { createExamSnapshot, isExamTableHeader, looksLikeExamSource } from './parser/exam.ts';
 export {
 	createStudent2024Snapshot,
 	type Student2024SnapshotOptions

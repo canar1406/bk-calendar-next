@@ -55,7 +55,14 @@ function createBrowserEnvironment(): GoogleIdentityLoaderEnvironment {
 			script.defer = true;
 			script.setAttribute(GIS_SCRIPT_ATTRIBUTE, '');
 			script.addEventListener('load', callbacks.onLoad, { once: true });
-			script.addEventListener('error', callbacks.onError, { once: true });
+			script.addEventListener(
+				'error',
+				() => {
+					script.remove();
+					callbacks.onError();
+				},
+				{ once: true }
+			);
 			document.head.append(script);
 		}
 	};

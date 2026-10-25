@@ -49,13 +49,14 @@ export async function handleWebBridgeRuntimeRequest(
 	return { handled: true };
 }
 
-function isTrustedReviewUrl(value: string | undefined): boolean {
+export function isTrustedReviewUrl(value: string | undefined): boolean {
 	if (!value) return false;
 	try {
 		const url = new URL(value);
-		return (
-			url.origin === 'https://canar1406.github.io' && url.pathname.startsWith('/bk-calendar-next/')
-		);
+		const isTrustedOrigin =
+			url.origin === 'https://canar1406.github.io' ||
+			(url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1'));
+		return isTrustedOrigin && url.pathname.startsWith('/bk-calendar-next/');
 	} catch {
 		return false;
 	}
