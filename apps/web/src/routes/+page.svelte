@@ -412,7 +412,7 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 <header class="site-header">
 	<a class="brand" href={`${base}/`} aria-label="BKalendar Next">
 		<span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-		<span>BKalendar</span>
+		<span>BKalendar Next</span>
 	</a>
 	<div class="site-header-actions">
 		<p>Dữ liệu chỉ được xử lý trên thiết bị của bạn</p>
@@ -649,7 +649,10 @@ Trình bày từ dòng 1 đến 3 / 3 dòng`;
 <footer>
 	<p>BKalendar Next · Local-first · Asia/Ho_Chi_Minh</p>
 	<p>
-		Dev by
+		<a href={`${base}/privacy/`}>Chính sách quyền riêng tư</a>
+		·
+		<a href={`${base}/terms/`}>Điều khoản dịch vụ</a>
+		· Dev by
 		<a href="https://home.heavietnam.com" target="_blank" rel="noreferrer">Heavn</a>
 	</p>
 </footer>
