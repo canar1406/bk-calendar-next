@@ -38,7 +38,7 @@ describe('portable calendar file compatibility', () => {
 		assert.equal(events.length, 2);
 		assert.equal(events[0]?.startDate.toJSDate().toISOString(), event.start);
 		assert.equal(events[1]?.startDate.toJSDate().toISOString(), '2026-09-07T00:30:00.000Z');
-		assert.equal(events[0]?.summary, event.title);
+		assert.equal(events[0]?.summary, '[MT1003] Giải tích 1; nhóm A, B (L11)');
 		assert.equal(events[0]?.location, event.location);
 		assert.equal(new Set(events.map((item) => item.uid)).size, 2);
 	});

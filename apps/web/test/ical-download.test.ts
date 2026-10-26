@@ -37,7 +37,7 @@ describe('web iCalendar export', () => {
 
 		assert.equal(result.filename, 'BKalendar-HK-261-MyBK.ics');
 		assert.equal(result.mimeType, 'text/calendar;charset=utf-8');
-		assert.match(result.content, /SUMMARY:Giải tích 1/);
+		assert.match(result.content, /SUMMARY:\[MT1003\] Giải tích 1 \(L11\)/);
 		assert.match(result.content, /\r\nEND:VCALENDAR\r\n$/);
 	});
 

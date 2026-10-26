@@ -34,6 +34,10 @@ export function formatGoogleEventSummary(event: ManagedEvent): string {
 	const title = event.title.trim();
 	const group = (event.group || event.metadata.group || '').trim();
 	const credits = (event.metadata.credits ?? '').trim();
+	const isExam = event.scheduleKind === 'exams' || Boolean(event.metadata.examType);
+	const room = isExam ? (event.location || event.metadata.room || '').trim() : '';
+	const campus = isExam ? (event.metadata.campus ?? '').trim() : '';
+	const duration = isExam ? (event.metadata.duration ?? '').trim() : '';
 
 	const normalizedCode = code.normalize('NFKC').toLocaleLowerCase('vi');
 	const normalizedTitle = title.normalize('NFKC').toLocaleLowerCase('vi');
@@ -51,6 +55,15 @@ export function formatGoogleEventSummary(event: ManagedEvent): string {
 	if (credits) {
 		suffixParts.push(`${credits} TC`);
 	}
+	if (room) {
+		suffixParts.push(/^phòng\b/iu.test(room) ? room : `Phòng ${room}`);
+	}
+	if (campus && !room.toLocaleLowerCase('vi').includes(campus.toLocaleLowerCase('vi'))) {
+		suffixParts.push(campus);
+	}
+	if (duration) {
+		suffixParts.push(duration);
+	}
 	const withSuffix =
 		suffixParts.length > 0 ? `${baseTitle} (${suffixParts.join(' - ')})` : baseTitle;
 	return event.icon ? `${event.icon} ${withSuffix}` : withSuffix;
@@ -61,6 +74,7 @@ export function toGoogleEventResource(event: ManagedEvent): GoogleEventResource 
 	return {
 		summary: formatGoogleEventSummary(event),
 		description: Object.entries(event.metadata)
+			.filter(([, value]) => value !== '')
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([key, value]) => `${key}: ${value}`)
 			.join('\n'),
@@ -144,18 +158,28 @@ export async function findManagedCalendars(
 	return calendars.sort((left, right) => left.id.localeCompare(right.id));
 }
 
+function isLegacyCalendarSummary(
+	summary: string | undefined,
+	sourceKind: ManagedEvent['sourceKind'],
+	semester: number
+): boolean {
+	if (!summary) return false;
+	const trimmed = summary.trim();
+	const prefixPattern =
+		sourceKind === 'postgraduate'
+			? '(?:SDH|BK)'
+			: sourceKind === 'lecturer'
+				? '(?:GV|BK)'
+				: '(?:SV|BK|TKB)';
+	return new RegExp(`^${prefixPattern}[-\\s]*${semester}$`, 'iu').test(trimmed);
+}
+
 export async function findLegacyCalendars(
 	fetcher: typeof fetch,
 	accessToken: string,
 	sourceKind: ManagedEvent['sourceKind'],
 	semester: number
 ): Promise<Array<{ id: string }>> {
-	const legacyName =
-		sourceKind === 'postgraduate'
-			? `SDH${semester}`
-			: sourceKind === 'lecturer'
-				? `GV${semester}`
-				: `SV${semester}`;
 	const calendars: Array<{ id: string }> = [];
 	let pageToken: string | undefined;
 	do {
@@ -185,7 +209,8 @@ export async function findLegacyCalendars(
 						calendar.id !== 'primary' &&
 						!calendar.primary &&
 						!calendar.deleted &&
-						calendar.summary === legacyName
+						!calendar.description?.includes(`Managed by ${MANAGED_BY}.`) &&
+						isLegacyCalendarSummary(calendar.summary, sourceKind, semester)
 				)
 				.map((calendar) => ({ id: calendar.id }))
 		);

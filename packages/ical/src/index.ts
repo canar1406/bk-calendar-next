@@ -4,6 +4,9 @@ const WEEK_IN_MILLISECONDS = 7 * 24 * 60 * 60 * 1_000;
 
 interface CalendarEvent {
 	readonly stableKey: string;
+	readonly scheduleKind?: string;
+	readonly courseCode?: string;
+	readonly group?: string;
 	readonly title: string;
 	readonly icon?: string;
 	readonly location: string;
@@ -13,6 +16,50 @@ interface CalendarEvent {
 	readonly activeWeekIndexes: readonly number[];
 	readonly excludedStarts: readonly string[];
 	readonly metadata: Readonly<Record<string, unknown>>;
+}
+
+export function formatIcalendarSummary(event: CalendarEvent): string {
+	const metadataString = (key: string): string => {
+		const value = event.metadata[key];
+		return typeof value === 'string' ? value.trim() : '';
+	};
+	const code = (event.courseCode ?? metadataString('courseCode')).trim();
+	const title = event.title.trim();
+	const group = (event.group ?? metadataString('group')).trim();
+	const credits = metadataString('credits');
+	const isExam = event.scheduleKind === 'exams' || Boolean(metadataString('examType'));
+	const room = isExam ? (event.location || metadataString('room')).trim() : '';
+	const campus = isExam ? metadataString('campus') : '';
+	const duration = isExam ? metadataString('duration') : '';
+
+	const normalizedCode = code.normalize('NFKC').toLocaleLowerCase('vi');
+	const normalizedTitle = title.normalize('NFKC').toLocaleLowerCase('vi');
+	const hasCodePrefix =
+		!code ||
+		normalizedCode === normalizedTitle ||
+		normalizedTitle.startsWith(`[${normalizedCode}]`) ||
+		normalizedTitle.startsWith(`${normalizedCode} `);
+	const baseTitle = hasCodePrefix ? title : `[${code}] ${title}`;
+
+	const suffixParts: string[] = [];
+	if (group && !normalizedTitle.includes(`(${group.normalize('NFKC').toLocaleLowerCase('vi')}`)) {
+		suffixParts.push(group);
+	}
+	if (credits) {
+		suffixParts.push(`${credits} TC`);
+	}
+	if (room) {
+		suffixParts.push(/^phòng\b/iu.test(room) ? room : `Phòng ${room}`);
+	}
+	if (campus && !room.toLocaleLowerCase('vi').includes(campus.toLocaleLowerCase('vi'))) {
+		suffixParts.push(campus);
+	}
+	if (duration) {
+		suffixParts.push(duration);
+	}
+	const withSuffix =
+		suffixParts.length > 0 ? `${baseTitle} (${suffixParts.join(' - ')})` : baseTitle;
+	return event.icon ? `${event.icon} ${withSuffix}` : withSuffix;
 }
 
 interface CalendarSnapshot {
@@ -78,7 +125,7 @@ function expandedEventLines(event: CalendarEvent, generatedAt: Date): string[] {
 				`DTSTAMP:${formatUtcDateTime(generatedAt)}`,
 				`DTSTART:${formatUtcDateTime(occurrenceStart)}`,
 				`DTEND:${formatUtcDateTime(new Date(occurrenceStart.getTime() + duration))}`,
-				`SUMMARY:${escapeText(event.icon ? `${event.icon} ${event.title}` : event.title)}`,
+				`SUMMARY:${escapeText(formatIcalendarSummary(event))}`,
 				`LOCATION:${escapeText(event.location)}`,
 				'STATUS:CONFIRMED',
 				'TRANSP:OPAQUE'
@@ -97,7 +144,7 @@ function eventLines(event: CalendarEvent, generatedAt: Date): string[] {
 		`DTSTART;TZID=${event.timeZone}:${formatZonedDateTime(event.start, event.timeZone)}`,
 		`DTEND;TZID=${event.timeZone}:${formatZonedDateTime(event.end, event.timeZone)}`,
 		...recurrenceLines(event),
-		`SUMMARY:${escapeText(event.icon ? `${event.icon} ${event.title}` : event.title)}`,
+		`SUMMARY:${escapeText(formatIcalendarSummary(event))}`,
 		`LOCATION:${escapeText(event.location)}`
 	];
 	const description = formatMetadata(event.metadata);
@@ -153,7 +200,7 @@ function recurrenceLines(event: CalendarEvent): string[] {
 
 function formatMetadata(metadata: Readonly<Record<string, unknown>>): string {
 	const entries = Object.entries(metadata).filter(
-		(entry): entry is [string, string] => typeof entry[1] === 'string'
+		(entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== ''
 	);
 	entries.sort(([left], [right]) => {
 		if (left === 'note') return -1;

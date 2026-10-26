@@ -102,6 +102,9 @@ export async function createExamSnapshot(
 		const courseCode = value('code') || subject?.[1] || title;
 		const group = value('group');
 		const examType = value('examType') || 'Thi';
+		const room = value('room');
+		const campus = value('campus');
+		const examMethod = value('method');
 		events.push({
 			sourceKind,
 			scheduleKind: 'exams',
@@ -111,7 +114,7 @@ export async function createExamSnapshot(
 			sessionOrdinal: 0,
 			weekday: ((new Date(dateUtc).getUTCDay() + 6) % 7) + 2,
 			title: `${examType} · ${title}`,
-			location: value('room'),
+			location: room,
 			start: new Date(dateUtc + (startMinutes - 420) * 60_000).toISOString(),
 			end: new Date(dateUtc + (endMinutes - 420) * 60_000).toISOString(),
 			timeZone: 'Asia/Ho_Chi_Minh',
@@ -121,8 +124,11 @@ export async function createExamSnapshot(
 				courseCode,
 				group,
 				examType,
-				campus: value('campus'),
-				examMethod: value('method')
+				examDate: date,
+				duration: `${endMinutes - startMinutes} phút`,
+				...(room ? { room } : {}),
+				campus,
+				examMethod
 			}
 		});
 	}

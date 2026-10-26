@@ -44,7 +44,7 @@ describe('iCalendar formatter', () => {
 			{ calendarName: 'BKalendar', generatedAt: new Date('2026-09-01T00:00:00.000Z') }
 		);
 
-		assert.match(output, /SUMMARY:🧮 Giải tích 1/);
+		assert.match(output, /SUMMARY:🧮 \[MT1003\] Giải tích 1/);
 	});
 
 	it('uses deterministic UID and escapes RFC 5545 text', () => {
@@ -56,7 +56,7 @@ describe('iCalendar formatter', () => {
 		const uid = first.match(/^UID:(.+)$/m)?.[1]?.replace(/\r$/, '');
 		assert.ok(uid);
 		assert.ok(second.includes(`UID:${uid}`));
-		assert.ok(first.includes('SUMMARY:Giải tích 1\\, đại cương\\; A\\\\B'));
+		assert.ok(first.includes('SUMMARY:[MT1003] Giải tích 1\\, đại cương\\; A\\\\B (L11)'));
 		assert.ok(first.includes('LOCATION:H1\\; GĐH1'));
 		assert.ok(first.includes('Dòng một\\nDòng hai'));
 	});

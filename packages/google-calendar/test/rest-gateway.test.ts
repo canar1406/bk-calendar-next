@@ -119,6 +119,33 @@ describe('Google Calendar REST payload', () => {
 		assert.equal(resource.summary, '[PH1003] Vật lý 1 (L12 - 4 TC)');
 	});
 
+	it('includes course code, exam type, group, room, campus, and duration in exam summaries', () => {
+		const resource = toGoogleEventResource({
+			...managedEvent,
+			scheduleKind: 'exams',
+			courseCode: 'MT1003',
+			title: 'GK · Giải tích 1',
+			group: 'L11_C_Ktr',
+			location: 'H6-802',
+			activeWeekIndexes: [0],
+			excludedStarts: [],
+			metadata: {
+				courseCode: 'MT1003',
+				group: 'L11_C_Ktr',
+				examType: 'GK',
+				room: 'H6-802',
+				campus: 'BK-CS2',
+				duration: '50 phút',
+				examMethod: ''
+			}
+		});
+		assert.equal(
+			resource.summary,
+			'[MT1003] GK · Giải tích 1 (L11_C_Ktr - Phòng H6-802 - BK-CS2 - 50 phút)'
+		);
+		assert.equal(resource.description?.includes('examMethod:'), false);
+	});
+
 	it('omits empty recurrence arrays when creating single-occurrence exam or class events', () => {
 		const singleEventResource = toGoogleEventResource({
 			...managedEvent,
